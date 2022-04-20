@@ -1,7 +1,9 @@
 package exl
 
 import (
+	"errors"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -39,28 +41,49 @@ func (*readDataStartRowIndexOutOfRange) ReadMetadata() *ReadMetadata {
 	return &ReadMetadata{DataStartRowIndex: -1}
 }
 
-func TestReadErr(t *testing.T) {
-	if _, err := Read("", new(readTmp)); err == nil {
+func TestReadFileErr(t *testing.T) {
+	if _, err := ReadFile("", new(readTmp)); err == nil {
 		t.Error("test failed")
 	}
 	testFile := "tmp.xlsx"
 	defer func() { _ = os.Remove(testFile) }()
 	_ = Write(testFile, []*writeTmp{{}})
-	if _, err := Read(testFile, new(readNilMetadata)); err != errMetadataIsNil {
+	if _, err := ReadFile(testFile, new(readNilMetadata)); err != errMetadataIsNil {
 		t.Error("test failed")
 	}
-	if _, err := Read(testFile, new(readSheetIndexOutOfRange)); err != errSheetIndexOutOfRange {
+	if _, err := ReadFile(testFile, new(readSheetIndexOutOfRange)); err != errSheetIndexOutOfRange {
 		t.Error("test failed")
 	}
-	if _, err := Read(testFile, new(readHeaderRowIndexOutOfRange)); err != errHeaderRowIndexOutOfRange {
+	if _, err := ReadFile(testFile, new(readHeaderRowIndexOutOfRange)); err != errHeaderRowIndexOutOfRange {
 		t.Error("test failed")
 	}
-	if _, err := Read(testFile, new(readDataStartRowIndexOutOfRange)); err != errDataStartRowIndexOutOfRange {
+	if _, err := ReadFile(testFile, new(readDataStartRowIndexOutOfRange)); err != errDataStartRowIndexOutOfRange {
 		t.Error("test failed")
 	}
 }
 
+func TestReadBinaryErr(t *testing.T) {
+	if _, err := ReadBinary(nil, new(readTmp)); err == nil {
+		t.Error("test failed")
+	}
+}
+
+type _reader struct{}
+
+func (*_reader) Read([]byte) (n int, err error) {
+	return 0, errors.New("")
+}
+
 func TestRead(t *testing.T) {
+	if _, err := Read(&_reader{}, new(readTmp)); err == nil {
+		t.Error("test failed")
+	}
+	if _, err := Read(strings.NewReader(""), new(readTmp)); err == nil {
+		t.Error("test failed")
+	}
+}
+
+func TestReadFile(t *testing.T) {
 	testFile := "tmp.xlsx"
 	defer func() { _ = os.Remove(testFile) }()
 	data := [][]string{
@@ -129,7 +152,7 @@ func TestRead(t *testing.T) {
 	if err := WriteExcel(testFile, data); err != nil {
 		t.Error("test failed: " + err.Error())
 	}
-	if models, err := Read(testFile, new(readTmp)); err != nil {
+	if models, err := ReadFile(testFile, new(readTmp)); err != nil {
 		t.Error("test failed: " + err.Error())
 	} else if len(models) != len(data)-1 {
 		t.Error("test failed")

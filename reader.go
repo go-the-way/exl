@@ -13,6 +13,8 @@ package exl
 
 import (
 	"errors"
+	"io"
+	"io/ioutil"
 	"reflect"
 
 	"github.com/billcoding/reflectx"
@@ -34,13 +36,39 @@ func read(maxCol int, row *xlsx.Row) []string {
 	return ls
 }
 
-// Read defines read excel each row bind to `T`
+// Read defines read io.Reader each row bind to `T`
 //
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func Read[T ReadBind](file string, bind T) ([]T, error) {
-	f, err := xlsx.OpenFile(file)
+func Read[T ReadBind](reader io.Reader, bind T) ([]T, error) {
+	if bytes, err := io.ReadAll(reader); err != nil {
+		return []T(nil), err
+	} else {
+		return ReadBinary(bytes, bind)
+	}
+}
+
+// ReadFile defines read excel each row bind to `T`
+//
+// params: file,excel file full path
+//
+// params: typed parameter T, must be implements exl.Bind
+func ReadFile[T ReadBind](file string, bind T) ([]T, error) {
+	if bytes, err := ioutil.ReadFile(file); err != nil {
+		return []T(nil), err
+	} else {
+		return ReadBinary(bytes, bind)
+	}
+}
+
+// ReadBinary defines read binary each row bind to `T`
+//
+// params: file,excel file full path
+//
+// params: typed parameter T, must be implements exl.Bind
+func ReadBinary[T ReadBind](bytes []byte, bind T) ([]T, error) {
+	f, err := xlsx.OpenBinary(bytes)
 	if err != nil {
 		return nil, err
 	}
