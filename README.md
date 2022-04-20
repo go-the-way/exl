@@ -4,6 +4,7 @@ Excel binding to struct written in Go.(Only supports Go1.18+)
 [![CircleCI](https://circleci.com/gh/go-the-way/exl/tree/main.svg?style=shield)](https://circleci.com/gh/go-the-way/exl/tree/main)
 [![codecov](https://codecov.io/gh/go-the-way/exl/branch/main/graph/badge.svg?token=8MAR3J959H)](https://codecov.io/gh/go-the-way/exl)
 [![Go Report Card](https://goreportcard.com/badge/github.com/go-the-way/exl)](https://goreportcard.com/report/github.com/go-the-way/exl)
+[![GoDoc](https://pkg.go.dev/badge/github.com/go-the-way/exl?status.svg)](https://pkg.go.dev/github.com/go-the-way/exl?tab=doc)
 
 ## usage
 
@@ -62,3 +63,12 @@ func main() {
 	}
 }
 ```
+
+## Methods
+
+* `exl.Read(reader io.Reader, bind T) error`
+* `exl.ReadFile(file string, bind T) error`
+* `exl.ReadBinary(bytes []byte, bind T) error`
+* `exl.Write(file string, ts []T) error`
+* `exl.ReadExcel(file string, sheetIndex int, walk func(index int, rows *xlsx.Row)) error`
+* `exl.WriteExcel(file string, data [][]string) error`
