@@ -13,10 +13,11 @@ package exl
 
 import (
 	"fmt"
-	"github.com/tealeg/xlsx/v3"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/tealeg/xlsx/v3"
 )
 
 func TestReadExcel(t *testing.T) {
