@@ -14,6 +14,8 @@ package exl
 import (
 	"errors"
 	"github.com/tealeg/xlsx/v3"
+	"os"
+	"path/filepath"
 	"reflect"
 )
 
@@ -72,6 +74,8 @@ func Write[T WriteBind](file string, ts []T) error {
 			}
 		}
 	}
+
+	_ = os.MkdirAll(filepath.Dir(file), 0600)
 
 	if err := f.Save(file); err != nil {
 		return err

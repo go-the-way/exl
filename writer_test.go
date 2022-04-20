@@ -111,7 +111,7 @@ func TestWrite(t *testing.T) {
 	if err := Write(testFile, data); err != nil {
 		t.Error("test failed: " + err.Error())
 	}
-	if models, err := Read(testFile, new(writeTmp)); err != nil {
+	if models, err := ReadFile(testFile, new(writeTmp)); err != nil {
 		t.Error("test failed: " + err.Error())
 	} else if len(models) != len(data) {
 		t.Error("test failed")
