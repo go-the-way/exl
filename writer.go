@@ -83,3 +83,22 @@ func Write[T WriteBind](file string, ts []T) error {
 
 	return nil
 }
+
+// WriteExcel defines write [][]string to excel
+//
+// params: file, excel file pull path
+//
+// params: data, write data to excel
+func WriteExcel(file string, data [][]string) error {
+	f := xlsx.NewFile()
+	sheet, _ := f.AddSheet("Sheet1")
+
+	for _, row := range data {
+		r := sheet.AddRow()
+		for _, cell := range row {
+			r.AddCell().SetString(cell)
+		}
+	}
+
+	return f.Save(file)
+}
