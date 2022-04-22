@@ -16,6 +16,7 @@ import (
 	"io"
 	"io/ioutil"
 	"reflect"
+	"strings"
 
 	"github.com/billcoding/reflectx"
 	"github.com/tealeg/xlsx/v3"
@@ -41,11 +42,13 @@ func read(maxCol int, row *xlsx.Row) []string {
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func Read[T ReadBind](reader io.Reader, bind T) ([]T, error) {
+//
+// params: filterFunc, filter callback func
+func Read[T ReadBind](reader io.Reader, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	if bytes, err := io.ReadAll(reader); err != nil {
 		return []T(nil), err
 	} else {
-		return ReadBinary(bytes, bind)
+		return ReadBinary(bytes, bind, filterFunc...)
 	}
 }
 
@@ -54,11 +57,13 @@ func Read[T ReadBind](reader io.Reader, bind T) ([]T, error) {
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func ReadFile[T ReadBind](file string, bind T) ([]T, error) {
+//
+// params: filterFunc, filter callback func
+func ReadFile[T ReadBind](file string, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	if bytes, err := ioutil.ReadFile(file); err != nil {
 		return []T(nil), err
 	} else {
-		return ReadBinary(bytes, bind)
+		return ReadBinary(bytes, bind, filterFunc...)
 	}
 }
 
@@ -67,7 +72,9 @@ func ReadFile[T ReadBind](file string, bind T) ([]T, error) {
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func ReadBinary[T ReadBind](bytes []byte, bind T) ([]T, error) {
+//
+// params: filterFunc, filter callback func
+func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	f, err := xlsx.OpenBinary(bytes)
 	if err != nil {
 		return nil, err
@@ -86,6 +93,7 @@ func ReadBinary[T ReadBind](bytes []byte, bind T) ([]T, error) {
 	if md.DataStartRowIndex < 0 || md.DataStartRowIndex > sheet.MaxRow-1 {
 		return nil, errDataStartRowIndexOutOfRange
 	}
+	trimSpace := md.TrimSpace
 	headerRow, _ := sheet.Row(md.HeaderRowIndex)
 	maxCol := sheet.MaxCol
 	headers := read(maxCol, headerRow)
@@ -114,13 +122,53 @@ func ReadBinary[T ReadBind](bytes []byte, bind T) ([]T, error) {
 				for di, d := range read(maxCol, row) {
 					if header, have := headerMap[di]; have {
 						if fi, fa := fieldMap[header]; fa {
-							reflectx.SetValue(reflect.ValueOf(d), val.Field(fi))
+							fie := val.Field(fi)
+							reflectx.SetValue(reflect.ValueOf(d), fie)
+							if trimSpace && (fie.Type().Kind() == reflect.String ||
+								(fie.Type().Kind() == reflect.Ptr && fie.Type().Elem().Kind() == reflect.String)) {
+								fie.SetString(strings.TrimSpace(fie.String()))
+							}
 						}
 					}
 				}
-				ts = append(ts, val.Addr().Interface().(T))
+				nT := val.Addr().Interface().(T)
+				add := true
+				if filterFunc != nil && len(filterFunc) > 0 {
+					for _, fF := range filterFunc {
+						if fF != nil {
+							add = fF(nT)
+							if !add {
+								break
+							}
+						}
+					}
+				}
+				if add {
+					ts = append(ts, nT)
+				}
 			}
 		}
 	}
 	return ts, nil
+}
+
+// ReadExcel defines read walk func from excel
+//
+// params: file, excel file pull path
+//
+// params: sheetIndex, current sheet index
+//
+// params: walk, walk func
+func ReadExcel(file string, sheetIndex int, walk func(index int, rows *xlsx.Row)) error {
+	f, err := xlsx.OpenFile(file)
+	if err != nil {
+		return err
+	}
+	sheet := f.Sheets[sheetIndex]
+	for i := 0; i < sheet.MaxRow; i++ {
+		if row, _ := sheet.Row(i); row != nil {
+			walk(i, row)
+		}
+	}
+	return nil
 }

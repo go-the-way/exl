@@ -2,7 +2,10 @@ package exl
 
 import (
 	"errors"
+	"fmt"
+	"github.com/tealeg/xlsx/v3"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -22,7 +25,7 @@ type (
 )
 
 func (*readTmp) ReadMetadata() *ReadMetadata {
-	return &ReadMetadata{DataStartRowIndex: 1, TagName: "excel"}
+	return &ReadMetadata{DataStartRowIndex: 1, TagName: "excel", TrimSpace: true}
 }
 
 func (*readNilMetadata) ReadMetadata() *ReadMetadata {
@@ -176,4 +179,96 @@ func TestReadFile(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestReadTrimSpace(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1", "Name2", "Name3", "Name4", "Name5"},
+		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
+		{"Name11", "Name22 ", "Name33", "Name44", "Name55"},
+		{"Name111", "Name222 ", "Name333 ", "Name444", "Name555"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+
+	if models, err := ReadFile(testFile, new(readTmp)); err != nil {
+		t.Error("test failed: " + err.Error())
+	} else if models[0].Name1 != "Name1" || models[1].Name2 != "Name22" || models[2].Name3 != "Name333" {
+		t.Error("test failed")
+	}
+}
+
+func TestReadFilterFunc(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1", "Name2", "Name3", "Name4", "Name5"},
+		{"Name11", "Name22", "Name33", "Name44", "Name55"},
+		{"Name111", "Name222", "Name333", "Name444", "Name555"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+	{
+		if models, err := ReadFile(testFile, new(readTmp), func(t *readTmp) (add bool) {
+			return true
+		}); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != 2 {
+			t.Error("test failed")
+		}
+	}
+	{
+		if models, err := ReadFile(testFile, new(readTmp), func(t *readTmp) (add bool) {
+			return false
+		}); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != 0 {
+			t.Error("test failed")
+		}
+	}
+	{
+		if models, err := ReadFile(testFile, new(readTmp), func(t *readTmp) (add bool) {
+			return t.Name1 == "Name11"
+		}); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != 1 {
+			t.Error("test failed")
+		}
+	}
+}
+
+func TestReadExcel(t *testing.T) {
+	if err := ReadExcel("", 0, nil); err == nil {
+		t.Error("test failed")
+	}
+}
+
+func testBasic(testNum int) error {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := make([][]string, testNum, testNum)
+	for i := range data {
+		data[i] = []string{fmt.Sprintf("%d", i)}
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		return err
+	}
+	if err := ReadExcel(testFile, 0, func(index int, rows *xlsx.Row) {
+		if !reflect.DeepEqual(rows.GetCell(0).Value, fmt.Sprintf("%d", index)) {
+			panic("test failed")
+		}
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func TestBasic(t *testing.T) {
+	_ = testBasic(10)
+	_ = testBasic(100)
+	_ = testBasic(10000)
 }
