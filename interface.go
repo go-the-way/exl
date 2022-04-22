@@ -22,6 +22,7 @@ type (
 		SheetIndex        int    // SheetIndex: read sheet index
 		HeaderRowIndex    int    // HeaderRowIndex: sheet header row index
 		DataStartRowIndex int    // DataStartRowIndex: sheet data start row index
+		TrimSpace         bool   // TrimSpace: trim space left and right only on `string` type
 	}
 	// WriteMetadata defines write metadata
 	WriteMetadata struct {
