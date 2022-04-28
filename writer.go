@@ -53,21 +53,22 @@ func Write[T WriteBind](file string, ts []T) error {
 			}
 		}
 	}
+	tT := new(T)
 	if sheet, _ := f.AddSheet(sheetName); sheet != nil {
-		if len(ts) > 0 {
-			typ := reflect.TypeOf(ts[0]).Elem()
-			numField := typ.NumField()
-			header := make([]any, numField, numField)
-			for i := 0; i < numField; i++ {
-				fe := typ.Field(i)
-				name := fe.Name
-				if tt, have := fe.Tag.Lookup(tagName); have {
-					name = tt
-				}
-				header[i] = name
+		typ := reflect.TypeOf(tT).Elem().Elem()
+		numField := typ.NumField()
+		header := make([]any, numField, numField)
+		for i := 0; i < numField; i++ {
+			fe := typ.Field(i)
+			name := fe.Name
+			if tt, have := fe.Tag.Lookup(tagName); have {
+				name = tt
 			}
-			// write header
-			write(sheet, header)
+			header[i] = name
+		}
+		// write header
+		write(sheet, header)
+		if len(ts) > 0 {
 			// write data
 			for _, t := range ts {
 				data := make([]any, numField, numField)
