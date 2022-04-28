@@ -38,7 +38,7 @@ func TestWriteErr(t *testing.T) {
 	if err := Write(testFile, []*writeTmp(nil)); err != errTsIsNil {
 		t.Error("test failed")
 	}
-	if err := Write(testFile, []*writeTmp{}); err == nil {
+	if err := Write(testFile, []*writeTmp{}); err != nil {
 		t.Error("test failed")
 	}
 }

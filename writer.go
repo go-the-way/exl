@@ -40,20 +40,24 @@ func Write[T WriteBind](file string, ts []T) error {
 		return errTsIsNil
 	}
 	f := xlsx.NewFile()
+	sheetName := "Sheet1"
+	tagName := "excel"
 	if len(ts) > 0 {
 		md := ts[0].WriteMetadata()
-		sheetName := "Sheet1"
-		if md != nil && md.SheetName != "" {
-			sheetName = md.SheetName
+		if md != nil {
+			if md.SheetName != "" {
+				sheetName = md.SheetName
+			}
+			if md.TagName != "" {
+				tagName = md.TagName
+			}
 		}
-		if sheet, _ := f.AddSheet(sheetName); sheet != nil {
+	}
+	if sheet, _ := f.AddSheet(sheetName); sheet != nil {
+		if len(ts) > 0 {
 			typ := reflect.TypeOf(ts[0]).Elem()
 			numField := typ.NumField()
 			header := make([]any, numField, numField)
-			tagName := "excel"
-			if md != nil && md.TagName != "" {
-				tagName = md.TagName
-			}
 			for i := 0; i < numField; i++ {
 				fe := typ.Field(i)
 				name := fe.Name
@@ -77,11 +81,7 @@ func Write[T WriteBind](file string, ts []T) error {
 
 	_ = os.MkdirAll(filepath.Dir(file), 0600)
 
-	if err := f.Save(file); err != nil {
-		return err
-	}
-
-	return nil
+	return f.Save(file)
 }
 
 // WriteExcel defines write [][]string to excel
