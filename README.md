@@ -64,13 +64,6 @@ func main() {
 }
 ```
 
-## [Releases](https://github.com/go-the-way/exl/releases)
-
-| Version                                                         | Description                         | Date         |
-|-----------------------------------------------------------------|-------------------------------------|--------------|
-| [v1.0.0](https://github.com/go-the-way/exl/releases/tag/v1.0.0) | First version                       | 2022-04-20   |
-| [v1.0.1](https://github.com/go-the-way/exl/releases/tag/v1.0.1) | Add trim space;Add read filter func | 2022-04-22   |
-
 ## Methods
 
 * `exl.Read(reader io.Reader, bind T, filterFunc ...func(t T) (add bool)) error`
@@ -79,8 +72,3 @@ func main() {
 * `exl.Write(file string, ts []T) error`
 * `exl.ReadExcel(file string, sheetIndex int, walk func(index int, rows *xlsx.Row)) error`
 * `exl.WriteExcel(file string, data [][]string) error`
-
-## TODO
-
-- [x] Add read hooker
-- [ ] Add writer hooker
