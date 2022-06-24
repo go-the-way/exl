@@ -18,30 +18,25 @@ type (
 		Name4 string `excel:"Name4"`
 		Name5 string `excel:"Name5"`
 	}
-	readNilMetadata                 struct{}
 	readSheetIndexOutOfRange        struct{}
 	readHeaderRowIndexOutOfRange    struct{}
 	readDataStartRowIndexOutOfRange struct{}
 )
 
-func (*readTmp) ReadMetadata() *ReadMetadata {
-	return &ReadMetadata{DataStartRowIndex: 1, TagName: "excel", TrimSpace: true}
+func (t *readTmp) ConfigureRM(rm *ReadMetadata) {
+	rm.TrimSpace = true
 }
 
-func (*readNilMetadata) ReadMetadata() *ReadMetadata {
-	return nil
+func (t *readSheetIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+	rm.SheetIndex = -1
 }
 
-func (*readSheetIndexOutOfRange) ReadMetadata() *ReadMetadata {
-	return &ReadMetadata{SheetIndex: -1}
+func (t *readHeaderRowIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+	rm.HeaderRowIndex = -1
 }
 
-func (*readHeaderRowIndexOutOfRange) ReadMetadata() *ReadMetadata {
-	return &ReadMetadata{HeaderRowIndex: -1}
-}
-
-func (*readDataStartRowIndexOutOfRange) ReadMetadata() *ReadMetadata {
-	return &ReadMetadata{DataStartRowIndex: -1}
+func (t *readDataStartRowIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+	rm.DataStartRowIndex = -1
 }
 
 func TestReadFileErr(t *testing.T) {
@@ -51,9 +46,6 @@ func TestReadFileErr(t *testing.T) {
 	testFile := "tmp.xlsx"
 	defer func() { _ = os.Remove(testFile) }()
 	_ = Write(testFile, []*writeTmp{{}})
-	if _, err := ReadFile(testFile, new(readNilMetadata)); err != errMetadataIsNil {
-		t.Error("test failed")
-	}
 	if _, err := ReadFile(testFile, new(readSheetIndexOutOfRange)); err != errSheetIndexOutOfRange {
 		t.Error("test failed")
 	}

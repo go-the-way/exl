@@ -24,9 +24,9 @@ type writeTmp struct {
 	Name5 string `excel:"Name5"`
 }
 
-func (*writeTmp) WriteMetadata() *WriteMetadata {
-	return &WriteMetadata{SheetName: "Sheet0", TagName: "excel"}
-}
+func (t *writeTmp) ConfigureRM(rm *ReadMetadata) {}
+
+func (t *writeTmp) ConfigureWM(wm *WriteMetadata) {}
 
 func (*writeTmp) ReadMetadata() *ReadMetadata {
 	return &ReadMetadata{DataStartRowIndex: 1, TagName: "excel"}

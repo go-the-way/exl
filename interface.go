@@ -13,9 +13,9 @@ package exl
 
 type (
 	// ReadBind defines read bind metadata
-	ReadBind interface{ ReadMetadata() *ReadMetadata }
+	ReadBind interface{ ConfigureRM(rm *ReadMetadata) }
 	// WriteBind defines write bind metadata
-	WriteBind interface{ WriteMetadata() *WriteMetadata }
+	WriteBind interface{ ConfigureWM(wm *WriteMetadata) }
 	// ReadMetadata defines read metadata
 	ReadMetadata struct {
 		TagName           string // TagName: tag name
@@ -29,4 +29,9 @@ type (
 		SheetName string // SheetName: default sheet name
 		TagName   string // TagName: tag name
 	}
+)
+
+var (
+	defaultRM = func() *ReadMetadata { return &ReadMetadata{TagName: "excel", DataStartRowIndex: 1} }
+	defaultWM = func() *WriteMetadata { return &WriteMetadata{SheetName: "Sheet1", TagName: "excel"} }
 )

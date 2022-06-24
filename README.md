@@ -25,12 +25,10 @@ type ReadExcelModel struct {
 	Name string `excel:"Name"`
 }
 
-func (*ReadExcelModel) ReadMetadata() *exl.ReadMetadata {
-	return &exl.ReadMetadata{DataStartRowIndex: 1}
-}
+func (*ReadExcelModel) ConfigureRM(*exl.ReadMetadata) {}
 
 func main() {
-	if models, err := exl.Read("/to/path.xlsx", new(ReadExcelModel)); err != nil {
+	if models, err := exl.ReadFile("/to/path.xlsx", new(ReadExcelModel)); err != nil {
 		fmt.Println("read excel err:" + err.Error())
 	} else {
 		fmt.Printf("read excel num: %d\n", len(models))
@@ -53,9 +51,7 @@ type WriteExcelModel struct {
 	Name string `excel:"Name"`
 }
 
-func (*WriteExcelModel) WriteMetadata() *exl.WriteMetadata {
-	return &exl.WriteMetadata{}
-}
+func (m *WriteExcelModel) ConfigureWM(*exl.WriteMetadata) {}
 
 func main() {
 	if err := exl.Write("/to/path.xlsx", []*WriteExcelModel{{100, "apple"}, {200, "pear"}}); err != nil {

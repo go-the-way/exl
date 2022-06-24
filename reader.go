@@ -23,7 +23,6 @@ import (
 )
 
 var (
-	errMetadataIsNil               = errors.New("exl: the metadata is nil")
 	errSheetIndexOutOfRange        = errors.New("exl: sheet index out of range")
 	errHeaderRowIndexOutOfRange    = errors.New("exl: header row index out of range")
 	errDataStartRowIndexOutOfRange = errors.New("exl: data start row index out of range")
@@ -79,22 +78,20 @@ func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add b
 	if err != nil {
 		return nil, err
 	}
-	md := bind.ReadMetadata()
-	if md == nil {
-		return nil, errMetadataIsNil
-	}
-	if md.SheetIndex < 0 || md.SheetIndex > len(f.Sheet)-1 {
+	rm := defaultRM()
+	bind.ConfigureRM(rm)
+	if rm.SheetIndex < 0 || rm.SheetIndex > len(f.Sheet)-1 {
 		return nil, errSheetIndexOutOfRange
 	}
-	sheet := f.Sheets[md.SheetIndex]
-	if md.HeaderRowIndex < 0 || md.HeaderRowIndex > sheet.MaxRow-1 {
+	sheet := f.Sheets[rm.SheetIndex]
+	if rm.HeaderRowIndex < 0 || rm.HeaderRowIndex > sheet.MaxRow-1 {
 		return nil, errHeaderRowIndexOutOfRange
 	}
-	if md.DataStartRowIndex < 0 || md.DataStartRowIndex > sheet.MaxRow-1 {
+	if rm.DataStartRowIndex < 0 || rm.DataStartRowIndex > sheet.MaxRow-1 {
 		return nil, errDataStartRowIndexOutOfRange
 	}
-	trimSpace := md.TrimSpace
-	headerRow, _ := sheet.Row(md.HeaderRowIndex)
+	trimSpace := rm.TrimSpace
+	headerRow, _ := sheet.Row(rm.HeaderRowIndex)
 	maxCol := sheet.MaxCol
 	headers := read(maxCol, headerRow)
 	headerMap := make(map[int]string, maxCol)
@@ -103,20 +100,16 @@ func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add b
 	}
 	fieldMap := make(map[string]int, 0)
 	typ := reflect.TypeOf(bind).Elem()
-	tagName := "excel"
-	if ta := md.TagName; ta != "" {
-		tagName = ta
-	}
 	for i := 0; i < typ.NumField(); i++ {
 		if t := typ.Field(i).Tag; t != "" {
-			if tt, have := t.Lookup(tagName); have {
+			if tt, have := t.Lookup(rm.TagName); have {
 				fieldMap[tt] = i
 			}
 		}
 	}
 	ts := make([]T, 0)
 	for i := 0; i < sheet.MaxRow; i++ {
-		if i >= md.DataStartRowIndex {
+		if i >= rm.DataStartRowIndex {
 			val := reflect.New(typ).Elem()
 			if row, _ := sheet.Row(i); row != nil {
 				for di, d := range read(maxCol, row) {

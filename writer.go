@@ -40,28 +40,19 @@ func Write[T WriteBind](file string, ts []T) error {
 		return errTsIsNil
 	}
 	f := xlsx.NewFile()
-	sheetName := "Sheet1"
-	tagName := "excel"
+	wm := defaultWM()
 	if len(ts) > 0 {
-		md := ts[0].WriteMetadata()
-		if md != nil {
-			if md.SheetName != "" {
-				sheetName = md.SheetName
-			}
-			if md.TagName != "" {
-				tagName = md.TagName
-			}
-		}
+		ts[0].ConfigureWM(wm)
 	}
 	tT := new(T)
-	if sheet, _ := f.AddSheet(sheetName); sheet != nil {
+	if sheet, _ := f.AddSheet(wm.SheetName); sheet != nil {
 		typ := reflect.TypeOf(tT).Elem().Elem()
 		numField := typ.NumField()
 		header := make([]any, numField, numField)
 		for i := 0; i < numField; i++ {
 			fe := typ.Field(i)
 			name := fe.Name
-			if tt, have := fe.Tag.Lookup(tagName); have {
+			if tt, have := fe.Tag.Lookup(wm.TagName); have {
 				name = tt
 			}
 			header[i] = name
