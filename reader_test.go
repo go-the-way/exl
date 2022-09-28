@@ -23,19 +23,19 @@ type (
 	readDataStartRowIndexOutOfRange struct{}
 )
 
-func (t *readTmp) ConfigureRM(rm *ReadMetadata) {
+func (t *readTmp) Read(rm *ReadMetadata) {
 	rm.TrimSpace = true
 }
 
-func (t *readSheetIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+func (t *readSheetIndexOutOfRange) Read(rm *ReadMetadata) {
 	rm.SheetIndex = -1
 }
 
-func (t *readHeaderRowIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+func (t *readHeaderRowIndexOutOfRange) Read(rm *ReadMetadata) {
 	rm.HeaderRowIndex = -1
 }
 
-func (t *readDataStartRowIndexOutOfRange) ConfigureRM(rm *ReadMetadata) {
+func (t *readDataStartRowIndexOutOfRange) Read(rm *ReadMetadata) {
 	rm.DataStartRowIndex = -1
 }
 

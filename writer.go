@@ -42,7 +42,7 @@ func Write[T WriteBind](file string, ts []T) error {
 	f := xlsx.NewFile()
 	wm := defaultWM()
 	if len(ts) > 0 {
-		ts[0].ConfigureWM(wm)
+		ts[0].Write(wm)
 	}
 	tT := new(T)
 	if sheet, _ := f.AddSheet(wm.SheetName); sheet != nil {

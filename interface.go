@@ -13,9 +13,9 @@ package exl
 
 type (
 	// ReadBind defines read bind metadata
-	ReadBind interface{ ConfigureRM(rm *ReadMetadata) }
+	ReadBind interface{ Read(rm *ReadMetadata) }
 	// WriteBind defines write bind metadata
-	WriteBind interface{ ConfigureWM(wm *WriteMetadata) }
+	WriteBind interface{ Write(wm *WriteMetadata) }
 	// ReadMetadata defines read metadata
 	ReadMetadata struct {
 		TagName           string // TagName: tag name

@@ -25,7 +25,7 @@ type ReadExcelModel struct {
 	Name string `excel:"Name"`
 }
 
-func (*ReadExcelModel) ConfigureRM(*exl.ReadMetadata) {}
+func (*ReadExcelModel) Read(*exl.ReadMetadata) {}
 
 func main() {
 	if models, err := exl.ReadFile("/to/path.xlsx", new(ReadExcelModel)); err != nil {
@@ -51,7 +51,7 @@ type WriteExcelModel struct {
 	Name string `excel:"Name"`
 }
 
-func (m *WriteExcelModel) ConfigureWM(*exl.WriteMetadata) {}
+func (m *WriteExcelModel) Write(*exl.WriteMetadata) {}
 
 func main() {
 	if err := exl.Write("/to/path.xlsx", []*WriteExcelModel{{100, "apple"}, {200, "pear"}}); err != nil {

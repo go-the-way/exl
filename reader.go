@@ -79,7 +79,7 @@ func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add b
 		return nil, err
 	}
 	rm := defaultRM()
-	bind.ConfigureRM(rm)
+	bind.Read(rm)
 	if rm.SheetIndex < 0 || rm.SheetIndex > len(f.Sheet)-1 {
 		return nil, errSheetIndexOutOfRange
 	}
