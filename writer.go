@@ -12,16 +12,22 @@
 package exl
 
 import (
-	"errors"
 	"github.com/tealeg/xlsx/v3"
 	"os"
 	"path/filepath"
 	"reflect"
 )
 
-var (
-	errTsIsNil = errors.New("exl: ts is nil")
-)
+type File struct{ file *xlsx.File }
+
+func NewFile(options ...xlsx.FileOption) *File {
+	return &File{xlsx.NewFile(options...)}
+}
+
+func (f *File) Save(dist string) error {
+	_ = os.MkdirAll(filepath.Dir(dist), 0600)
+	return f.file.Save(dist)
+}
 
 func write(sheet *xlsx.Sheet, data []any) {
 	r := sheet.AddRow()
@@ -30,22 +36,55 @@ func write(sheet *xlsx.Sheet, data []any) {
 	}
 }
 
-// Write defines write []T to excel file
+// Write defines write []T to Excel file
 //
-// params: file,excel file full path
+// params: file,Excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
 func Write[T WriteBind](file string, ts []T) error {
-	if ts == nil {
-		return errTsIsNil
+	f := NewFile()
+	WriteSheet[T](f, ts)
+	return f.Save(file)
+}
+
+// WriteExcel defines write [][]string to excel
+//
+// params: dist, excel file pull path
+//
+// params: data, write data to excel
+func WriteExcel(dist string, data [][]string) error {
+	return WriteExcelSheets(dist, []SheetData{{"Sheet1", data}})
+}
+
+type SheetData struct {
+	Sheet string
+	Data  [][]string
+}
+
+func WriteExcelSheets(dist string, sheets []SheetData) error {
+	f := NewFile()
+	for _, sht := range sheets {
+		if sheet, err := f.file.AddSheet(sht.Sheet); err != nil {
+			return err
+		} else {
+			for _, row := range sht.Data {
+				r := sheet.AddRow()
+				for _, cell := range row {
+					r.AddCell().SetString(cell)
+				}
+			}
+		}
 	}
-	f := xlsx.NewFile()
+	return f.Save(dist)
+}
+
+func WriteSheet[T WriteBind](file *File, ts []T) {
 	wm := defaultWM()
 	if len(ts) > 0 {
 		ts[0].Write(wm)
 	}
 	tT := new(T)
-	if sheet, _ := f.AddSheet(wm.SheetName); sheet != nil {
+	if sheet, _ := file.file.AddSheet(wm.SheetName); sheet != nil {
 		typ := reflect.TypeOf(tT).Elem().Elem()
 		numField := typ.NumField()
 		header := make([]any, numField, numField)
@@ -70,27 +109,4 @@ func Write[T WriteBind](file string, ts []T) error {
 			}
 		}
 	}
-
-	_ = os.MkdirAll(filepath.Dir(file), 0600)
-
-	return f.Save(file)
-}
-
-// WriteExcel defines write [][]string to excel
-//
-// params: file, excel file pull path
-//
-// params: data, write data to excel
-func WriteExcel(file string, data [][]string) error {
-	f := xlsx.NewFile()
-	sheet, _ := f.AddSheet("Sheet1")
-
-	for _, row := range data {
-		r := sheet.AddRow()
-		for _, cell := range row {
-			r.AddCell().SetString(cell)
-		}
-	}
-
-	return f.Save(file)
 }

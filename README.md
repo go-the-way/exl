@@ -28,7 +28,7 @@ type ReadExcelModel struct {
 func (*ReadExcelModel) Read(*exl.ReadMetadata) {}
 
 func main() {
-	if models, err := exl.ReadFile("/to/path.xlsx", new(ReadExcelModel)); err != nil {
+	if models, err := exl.ReadFile[*ReadExcelModel]("/to/path.xlsx"); err != nil {
 		fmt.Println("read excel err:" + err.Error())
 	} else {
 		fmt.Printf("read excel num: %d\n", len(models))
@@ -61,12 +61,3 @@ func main() {
 	}
 }
 ```
-
-## Methods
-
-* `exl.Read(reader io.Reader, bind T, filterFunc ...func(t T) (add bool)) error`
-* `exl.ReadFile(file string, bind T, filterFunc ...func(t T) (add bool)) error`
-* `exl.ReadBinary(bytes []byte, bind T, filterFunc ...func(t T) (add bool)) error`
-* `exl.Write(file string, ts []T) error`
-* `exl.ReadExcel(file string, sheetIndex int, walk func(index int, rows *xlsx.Row)) error`
-* `exl.WriteExcel(file string, data [][]string) error`

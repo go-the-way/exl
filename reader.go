@@ -14,7 +14,7 @@ package exl
 import (
 	"errors"
 	"io"
-	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 
@@ -23,9 +23,9 @@ import (
 )
 
 var (
-	errSheetIndexOutOfRange        = errors.New("exl: sheet index out of range")
-	errHeaderRowIndexOutOfRange    = errors.New("exl: header row index out of range")
-	errDataStartRowIndexOutOfRange = errors.New("exl: data start row index out of range")
+	ErrSheetIndexOutOfRange        = errors.New("exl: sheet index out of range")
+	ErrHeaderRowIndexOutOfRange    = errors.New("exl: header row index out of range")
+	ErrDataStartRowIndexOutOfRange = errors.New("exl: data start row index out of range")
 )
 
 func read(maxCol int, row *xlsx.Row) []string {
@@ -38,57 +38,52 @@ func read(maxCol int, row *xlsx.Row) []string {
 
 // Read defines read io.Reader each row bind to `T`
 //
-// params: file,excel file full path
-//
-// params: typed parameter T, must be implements exl.Bind
+// params: file,Excel file full path
 //
 // params: filterFunc, filter callback func
-func Read[T ReadBind](reader io.Reader, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
+func Read[T ReadBind](reader io.Reader, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	if bytes, err := io.ReadAll(reader); err != nil {
 		return []T(nil), err
 	} else {
-		return ReadBinary(bytes, bind, filterFunc...)
+		return ReadBinary(bytes, filterFunc...)
 	}
 }
 
 // ReadFile defines read excel each row bind to `T`
 //
-// params: file,excel file full path
-//
-// params: typed parameter T, must be implements exl.Bind
+// params: file,Excel file full path
 //
 // params: filterFunc, filter callback func
-func ReadFile[T ReadBind](file string, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
-	if bytes, err := ioutil.ReadFile(file); err != nil {
+func ReadFile[T ReadBind](file string, filterFunc ...func(t T) (add bool)) ([]T, error) {
+	if bytes, err := os.ReadFile(file); err != nil {
 		return []T(nil), err
 	} else {
-		return ReadBinary(bytes, bind, filterFunc...)
+		return ReadBinary(bytes, filterFunc...)
 	}
 }
 
 // ReadBinary defines read binary each row bind to `T`
 //
-// params: file,excel file full path
-//
-// params: typed parameter T, must be implements exl.Bind
+// params: file,Excel file full path
 //
 // params: filterFunc, filter callback func
-func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add bool)) ([]T, error) {
+func ReadBinary[T ReadBind](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	f, err := xlsx.OpenBinary(bytes)
 	if err != nil {
 		return nil, err
 	}
+	var t T
 	rm := defaultRM()
-	bind.Read(rm)
+	t.Read(rm)
 	if rm.SheetIndex < 0 || rm.SheetIndex > len(f.Sheet)-1 {
-		return nil, errSheetIndexOutOfRange
+		return nil, ErrSheetIndexOutOfRange
 	}
 	sheet := f.Sheets[rm.SheetIndex]
 	if rm.HeaderRowIndex < 0 || rm.HeaderRowIndex > sheet.MaxRow-1 {
-		return nil, errHeaderRowIndexOutOfRange
+		return nil, ErrHeaderRowIndexOutOfRange
 	}
 	if rm.DataStartRowIndex < 0 || rm.DataStartRowIndex > sheet.MaxRow-1 {
-		return nil, errDataStartRowIndexOutOfRange
+		return nil, ErrDataStartRowIndexOutOfRange
 	}
 	trimSpace := rm.TrimSpace
 	headerRow, _ := sheet.Row(rm.HeaderRowIndex)
@@ -99,10 +94,10 @@ func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add b
 		headerMap[i] = h
 	}
 	fieldMap := make(map[string]int, 0)
-	typ := reflect.TypeOf(bind).Elem()
+	typ := reflect.TypeOf(t).Elem()
 	for i := 0; i < typ.NumField(); i++ {
-		if t := typ.Field(i).Tag; t != "" {
-			if tt, have := t.Lookup(rm.TagName); have {
+		if ta := typ.Field(i).Tag; ta != "" {
+			if tt, have := ta.Lookup(rm.TagName); have {
 				fieldMap[tt] = i
 			}
 		}
@@ -147,7 +142,7 @@ func ReadBinary[T ReadBind](bytes []byte, bind T, filterFunc ...func(t T) (add b
 
 // ReadExcel defines read walk func from excel
 //
-// params: file, excel file pull path
+// params: file, Excel file pull path
 //
 // params: sheetIndex, current sheet index
 //
