@@ -61,3 +61,27 @@ func main() {
 	}
 }
 ```
+
+## Writer
+
+```go
+package main
+
+import (
+	"fmt"
+	
+	"github.com/go-the-way/exl"
+)
+
+func main() {
+	w := exl.NewWriter()
+	if err := w.Write("Sheet1", []int{1, 2, 3, 4, 5}); err != nil {
+		fmt.Println(err)
+		return
+	}
+	if err := w.SaveTo("dist.xlsx");err!=nil{
+		fmt.Println(err)
+		return
+    }
+}
+```
