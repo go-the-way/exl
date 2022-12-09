@@ -9,8 +9,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//Package exl
+// Package exl
 //
 // Excel binding to struct written in Go.(Only supports Go1.18+)
-//
 package exl

@@ -12,101 +12,148 @@
 package exl
 
 import (
-	"github.com/tealeg/xlsx/v3"
-	"os"
-	"path/filepath"
+	"errors"
+	"fmt"
+	"io"
 	"reflect"
+
+	"github.com/tealeg/xlsx/v3"
 )
 
-type File struct{ file *xlsx.File }
-
-func NewFile(options ...xlsx.FileOption) *File {
-	return &File{xlsx.NewFile(options...)}
+// Writer define a writer for exl
+type Writer struct {
+	file      *xlsx.File
+	mapHeader []reflect.Value
+	ignore    map[int]struct{}
 }
 
-func (f *File) Save(dist string) error {
-	_ = os.MkdirAll(filepath.Dir(dist), 0600)
-	return f.file.Save(dist)
+// NewWriter returns new exl writer
+func NewWriter(options ...xlsx.FileOption) *Writer {
+	w := &Writer{file: xlsx.NewFile(options...)}
+	w.reset()
+	return w
 }
 
-func write(sheet *xlsx.Sheet, data []any) {
-	r := sheet.AddRow()
-	for _, cell := range data {
-		r.AddCell().SetValue(cell)
+// Write or append the param data into sheet
+func (w *Writer) Write(sheet string, data any) error {
+	if sht, ok := w.file.Sheet[sheet]; ok {
+		w.reset()
+		return w.writeSheet(sht, data)
+	}
+	if sht, err := w.file.AddSheet(sheet); err != nil {
+		return err
+	} else {
+		w.reset()
+		return w.writeSheet(sht, data)
 	}
 }
 
-// Write defines write []T to Excel file
-//
-// params: file,Excel file full path
-//
-// params: typed parameter T, must be implements exl.Bind
-func Write[T WriteBind](file string, ts []T) error {
-	f := NewFile()
-	WriteSheet[T](f, ts)
-	return f.Save(file)
-}
+// SaveTo the buffered binary into dist file
+func (w *Writer) SaveTo(path string) (err error) { return w.file.Save(path) }
 
-// WriteExcel defines write [][]string to excel
-//
-// params: dist, excel file pull path
-//
-// params: data, write data to excel
-func WriteExcel(dist string, data [][]string) error {
-	return WriteExcelSheets(dist, []SheetData{{"Sheet1", data}})
-}
+// WriteTo the buffered binary into new writer
+func (w *Writer) WriteTo(dw io.Writer) (n int, err error) { return 0, w.file.Write(dw) }
 
-type SheetData struct {
-	Sheet string
-	Data  [][]string
-}
-
-func WriteExcelSheets(dist string, sheets []SheetData) error {
-	f := NewFile()
-	for _, sht := range sheets {
-		if sheet, err := f.file.AddSheet(sht.Sheet); err != nil {
-			return err
-		} else {
-			for _, row := range sht.Data {
-				r := sheet.AddRow()
-				for _, cell := range row {
-					r.AddCell().SetString(cell)
-				}
-			}
-		}
+func (w *Writer) writeSheet(sheet *xlsx.Sheet, data any) (err error) {
+	value := w.deepValue(reflect.ValueOf(data))
+	vk := value.Type().Kind()
+	switch vk {
+	case reflect.Array, reflect.Slice:
+		w.writeArrayOrSlice(sheet, value)
+		return nil
 	}
-	return f.Save(dist)
+	return errors.New(fmt.Sprintf("not supported type: %v", vk))
 }
 
-func WriteSheet[T WriteBind](file *File, ts []T) {
-	wm := defaultWM()
-	if len(ts) > 0 {
-		ts[0].Write(wm)
+func (w *Writer) writeArrayOrSlice(sheet *xlsx.Sheet, value reflect.Value) {
+	arrLen := value.Len()
+	var header *reflect.Value
+	if arrLen > 0 {
+		dv := w.deepValue(value.Index(0))
+		header = &dv
 	}
-	tT := new(T)
-	if sheet, _ := file.file.AddSheet(wm.SheetName); sheet != nil {
-		typ := reflect.TypeOf(tT).Elem().Elem()
-		numField := typ.NumField()
-		header := make([]any, numField, numField)
-		for i := 0; i < numField; i++ {
-			fe := typ.Field(i)
-			name := fe.Name
-			if tt, have := fe.Tag.Lookup(wm.TagName); have {
-				name = tt
-			}
-			header[i] = name
+	w.setHeaderRow(sheet.AddRow(), w.deepType(value.Type().Elem()), header)
+	for i := 0; i < arrLen; i++ {
+		w.setDataRow(sheet.AddRow(), w.deepValue(value.Index(i)))
+	}
+}
+
+func (w *Writer) setHeaderRow(row *xlsx.Row, typ reflect.Type, value *reflect.Value) {
+	vk := typ.Kind()
+
+	if vk == reflect.Map && value != nil {
+		for _, _mk := range value.MapKeys() {
+			mk := w.deepValue(_mk)
+			w.mapHeader = append(w.mapHeader, mk)
+			w.addCell(row, mk)
 		}
-		// write header
-		write(sheet, header)
-		if len(ts) > 0 {
-			// write data
-			for _, t := range ts {
-				data := make([]any, numField, numField)
-				for i := 0; i < numField; i++ {
-					data[i] = reflect.ValueOf(t).Elem().Field(i).Interface()
-				}
-				write(sheet, data)
+		return
+	}
+
+	if vk == reflect.Struct {
+		for i := 0; i < typ.NumField(); i++ {
+			field := typ.Field(i)
+			excelTag, _ := field.Tag.Lookup("excel")
+			if excelTag == "" {
+				row.AddCell().SetString(field.Name)
+			} else if excelTag != "-" {
+				row.AddCell().SetString(excelTag)
+			}
+			if excelTag == "-" {
+				w.ignore[i] = struct{}{}
 			}
 		}
+		return
+	}
+
+	row.AddCell().SetString("Unnamed")
+}
+
+func (w *Writer) setDataRow(row *xlsx.Row, value reflect.Value) {
+	vk := value.Kind()
+
+	if vk == reflect.Map {
+		for _, k := range w.mapHeader {
+			v := value.MapIndex(k)
+			w.addCell(row, v)
+		}
+		return
+	}
+
+	if vk == reflect.Struct {
+		da := value.Type()
+		for i := 0; i < da.NumField(); i++ {
+			if _, ok := w.ignore[i]; !ok {
+				w.addCell(row, w.deepValue(value.Field(i)))
+			}
+		}
+		return
+	}
+
+	w.addCell(row, value)
+}
+
+func (w *Writer) reset() {
+	w.mapHeader = make([]reflect.Value, 0)
+	w.ignore = make(map[int]struct{}, 0)
+}
+
+func (w *Writer) deepType(typ reflect.Type) reflect.Type {
+	if typ.Kind() == reflect.Ptr {
+		return w.deepType(typ.Elem())
+	}
+	return typ
+}
+
+func (w *Writer) deepValue(value reflect.Value) reflect.Value {
+	if value.Type().Kind() == reflect.Ptr {
+		return w.deepValue(value.Elem())
+	}
+	return value
+}
+
+func (w *Writer) addCell(row *xlsx.Row, value reflect.Value) {
+	if value.CanInterface() {
+		row.AddCell().SetValue(value.Interface())
 	}
 }

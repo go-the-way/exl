@@ -2,10 +2,7 @@ module github.com/go-the-way/exl
 
 go 1.18
 
-require (
-	github.com/billcoding/reflectx v1.0.0
-	github.com/tealeg/xlsx/v3 v3.2.4
-)
+require github.com/tealeg/xlsx/v3 v3.2.4
 
 require (
 	github.com/frankban/quicktest v1.11.2 // indirect
