@@ -12,17 +12,12 @@
 package exl
 
 import (
-	"database/sql"
 	"fmt"
 	"reflect"
 	"strconv"
 )
 
 func setValue(srcValue, distValue reflect.Value) {
-	if srcValue.Type() == distValue.Type() {
-		distValue.Set(srcValue)
-		return
-	}
 	switch distValue.Kind() {
 	case reflect.String:
 		setStringValue(srcValue, distValue)
@@ -34,6 +29,10 @@ func setValue(srcValue, distValue reflect.Value) {
 		setUintValue(srcValue, distValue)
 	case reflect.Float32, reflect.Float64:
 		setFloatValue(srcValue, distValue)
+	default:
+		if srcValue.Type() == distValue.Type() {
+			distValue.Set(srcValue)
+		}
 	}
 }
 
@@ -59,11 +58,6 @@ func setBoolValue(srcValue, distValue reflect.Value) {
 	// Bool->Bool
 	case reflect.Bool:
 		distValue.Set(srcValue)
-	// sql.NullBool->Bool
-	case reflect.Struct:
-		if srcValue.Type() == reflect.TypeOf(sql.NullBool{}) {
-			distValue.Set(srcValue)
-		}
 	}
 }
 

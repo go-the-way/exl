@@ -22,19 +22,20 @@ import (
 )
 
 type (
-	// ReadBind defines read bind metadata
-	ReadBind interface{ ConfigureRM(rm *ReadMetadata) }
-	// ReadMetadata defines read metadata
-	ReadMetadata struct {
-		TagName           string // TagName: tag name
-		SheetIndex        int    // SheetIndex: read sheet index
-		HeaderRowIndex    int    // HeaderRowIndex: sheet header row index
-		DataStartRowIndex int    // DataStartRowIndex: sheet data start row index
-		TrimSpace         bool   // TrimSpace: trim space left and right only on `string` type
+	Configurator[C any] interface {
+		Configure(c C)
+	}
+	ReadConfigurator interface{ Configurator[*ReadConfig] }
+	ReadConfig       struct {
+		TagName           string
+		SheetIndex        int
+		HeaderRowIndex    int
+		DataStartRowIndex int
+		TrimSpace         bool
 	}
 )
 
-var defaultRM = func() *ReadMetadata { return &ReadMetadata{TagName: "excel", DataStartRowIndex: 1} }
+var defaultReadConfig = func() *ReadConfig { return &ReadConfig{TagName: "excel", DataStartRowIndex: 1} }
 
 var (
 	ErrSheetIndexOutOfRange        = errors.New("exl: sheet index out of range")
@@ -51,7 +52,7 @@ func read(maxCol int, row *xlsx.Row) []string {
 }
 
 // Read io.Reader each row bind to `T`
-func Read[T ReadBind](reader io.Reader, filterFunc ...func(t T) (add bool)) ([]T, error) {
+func Read[T ReadConfigurator](reader io.Reader, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	if bytes, err := io.ReadAll(reader); err != nil {
 		return []T(nil), err
 	} else {
@@ -60,7 +61,7 @@ func Read[T ReadBind](reader io.Reader, filterFunc ...func(t T) (add bool)) ([]T
 }
 
 // ReadFile each row bind to `T`
-func ReadFile[T ReadBind](file string, filterFunc ...func(t T) (add bool)) ([]T, error) {
+func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	if bytes, err := os.ReadFile(file); err != nil {
 		return []T(nil), err
 	} else {
@@ -69,26 +70,26 @@ func ReadFile[T ReadBind](file string, filterFunc ...func(t T) (add bool)) ([]T,
 }
 
 // ReadBinary each row bind to `T`
-func ReadBinary[T ReadBind](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
+func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	f, err := xlsx.OpenBinary(bytes)
 	if err != nil {
 		return nil, err
 	}
 	var t T
-	rm := defaultRM()
-	t.ConfigureRM(rm)
-	if rm.SheetIndex < 0 || rm.SheetIndex > len(f.Sheet)-1 {
+	rc := defaultReadConfig()
+	t.Configure(rc)
+	if rc.SheetIndex < 0 || rc.SheetIndex > len(f.Sheet)-1 {
 		return nil, ErrSheetIndexOutOfRange
 	}
-	sheet := f.Sheets[rm.SheetIndex]
-	if rm.HeaderRowIndex < 0 || rm.HeaderRowIndex > sheet.MaxRow-1 {
+	sheet := f.Sheets[rc.SheetIndex]
+	if rc.HeaderRowIndex < 0 || rc.HeaderRowIndex > sheet.MaxRow-1 {
 		return nil, ErrHeaderRowIndexOutOfRange
 	}
-	if rm.DataStartRowIndex < 0 || rm.DataStartRowIndex > sheet.MaxRow-1 {
+	if rc.DataStartRowIndex < 0 || rc.DataStartRowIndex > sheet.MaxRow-1 {
 		return nil, ErrDataStartRowIndexOutOfRange
 	}
-	trimSpace := rm.TrimSpace
-	headerRow, _ := sheet.Row(rm.HeaderRowIndex)
+	trimSpace := rc.TrimSpace
+	headerRow, _ := sheet.Row(rc.HeaderRowIndex)
 	maxCol := sheet.MaxCol
 	headers := read(maxCol, headerRow)
 	headerMap := make(map[int]string, maxCol)
@@ -99,14 +100,14 @@ func ReadBinary[T ReadBind](bytes []byte, filterFunc ...func(t T) (add bool)) ([
 	typ := reflect.TypeOf(t).Elem()
 	for i := 0; i < typ.NumField(); i++ {
 		if ta := typ.Field(i).Tag; ta != "" {
-			if tt, have := ta.Lookup(rm.TagName); have {
+			if tt, have := ta.Lookup(rc.TagName); have {
 				fieldMap[tt] = i
 			}
 		}
 	}
 	ts := make([]T, 0)
 	for i := 0; i < sheet.MaxRow; i++ {
-		if i >= rm.DataStartRowIndex {
+		if i >= rc.DataStartRowIndex {
 			val := reflect.New(typ).Elem()
 			if row, _ := sheet.Row(i); row != nil {
 				for di, d := range read(maxCol, row) {

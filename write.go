@@ -15,21 +15,19 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	
+
 	"github.com/tealeg/xlsx/v3"
 )
 
 type (
-	// WriteBind defines write bind metadata
-	WriteBind interface{ ConfigureWM(wm *WriteMetadata) }
-	// WriteMetadata defines write metadata
-	WriteMetadata struct {
-		SheetName string // SheetName: default sheet name
-		TagName   string // TagName: tag name
+	WriteConfigurator interface{ Configurator[*WriteConfig] }
+	WriteConfig       struct {
+		SheetName string
+		TagName   string
 	}
 )
 
-var defaultWM = func() *WriteMetadata { return &WriteMetadata{SheetName: "Sheet1", TagName: "excel"} }
+var defaultWriteConfig = func() *WriteConfig { return &WriteConfig{SheetName: "Sheet1", TagName: "excel"} }
 
 func write(sheet *xlsx.Sheet, data []any) {
 	r := sheet.AddRow()
@@ -43,21 +41,21 @@ func write(sheet *xlsx.Sheet, data []any) {
 // params: file,excel file full path
 //
 // params: typed parameter T, must be implements exl.Bind
-func Write[T WriteBind](file string, ts []T) error {
+func Write[T WriteConfigurator](file string, ts []T) error {
 	f := xlsx.NewFile()
-	wm := defaultWM()
+	wc := defaultWriteConfig()
 	if len(ts) > 0 {
-		ts[0].ConfigureWM(wm)
+		ts[0].Configure(wc)
 	}
 	tT := new(T)
-	if sheet, _ := f.AddSheet(wm.SheetName); sheet != nil {
+	if sheet, _ := f.AddSheet(wc.SheetName); sheet != nil {
 		typ := reflect.TypeOf(tT).Elem().Elem()
 		numField := typ.NumField()
 		header := make([]any, numField, numField)
 		for i := 0; i < numField; i++ {
 			fe := typ.Field(i)
 			name := fe.Name
-			if tt, have := fe.Tag.Lookup(wm.TagName); have {
+			if tt, have := fe.Tag.Lookup(wc.TagName); have {
 				name = tt
 			}
 			header[i] = name
