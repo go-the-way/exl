@@ -12,8 +12,7 @@
 package exl
 
 import (
-	"os"
-	"path/filepath"
+	"io"
 	"reflect"
 
 	"github.com/tealeg/xlsx/v3"
@@ -43,6 +42,22 @@ func write(sheet *xlsx.Sheet, data []any) {
 // params: typed parameter T, must be implements exl.Bind
 func Write[T WriteConfigurator](file string, ts []T) error {
 	f := xlsx.NewFile()
+	write0(f, ts)
+	return f.Save(file)
+}
+
+// WriteTo defines write to []T to excel file
+//
+// params: w, the dist writer
+//
+// params: typed parameter T, must be implements exl.Bind
+func WriteTo[T WriteConfigurator](w io.Writer, ts []T) error {
+	f := xlsx.NewFile()
+	write0(f, ts)
+	return f.Write(w)
+}
+
+func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 	wc := defaultWriteConfig()
 	if len(ts) > 0 {
 		ts[0].Configure(wc)
@@ -73,10 +88,6 @@ func Write[T WriteConfigurator](file string, ts []T) error {
 			}
 		}
 	}
-
-	_ = os.MkdirAll(filepath.Dir(file), 0600)
-
-	return f.Save(file)
 }
 
 // WriteExcel defines write [][]string to excel
@@ -86,14 +97,27 @@ func Write[T WriteConfigurator](file string, ts []T) error {
 // params: data, write data to excel
 func WriteExcel(file string, data [][]string) error {
 	f := xlsx.NewFile()
-	sheet, _ := f.AddSheet("Sheet1")
+	writeExcel0(f, data)
+	return f.Save(file)
+}
 
+// WriteExcelTo defines write [][]string to excel
+//
+// params: w, the dist writer
+//
+// params: data, write data to excel
+func WriteExcelTo(w io.Writer, data [][]string) error {
+	f := xlsx.NewFile()
+	writeExcel0(f, data)
+	return f.Write(w)
+}
+
+func writeExcel0(f *xlsx.File, data [][]string) {
+	sheet, _ := f.AddSheet("Sheet1")
 	for _, row := range data {
 		r := sheet.AddRow()
 		for _, cell := range row {
 			r.AddCell().SetString(cell)
 		}
 	}
-
-	return f.Save(file)
 }
