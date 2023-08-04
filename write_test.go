@@ -26,9 +26,9 @@ type writeTmp struct {
 
 type writeReadTmp writeTmp
 
-func (*writeReadTmp) Configure(rc *ReadConfig) {}
-
-func (*writeTmp) Configure(wc *WriteConfig) {}
+func (*writeReadTmp) WriteConfigure(_ *WriteConfig) {}
+func (*writeReadTmp) ReadConfigure(_ *ReadConfig)   {}
+func (*writeTmp) WriteConfigure(_ *WriteConfig)     {}
 
 func TestWriteErr(t *testing.T) {
 	testFile := "tmp.xlsx"

@@ -19,11 +19,8 @@ import (
 )
 
 type (
-	WriteConfigurator interface{ Configurator[*WriteConfig] }
-	WriteConfig       struct {
-		SheetName string
-		TagName   string
-	}
+	WriteConfigurator interface{ WriteConfigure(wc *WriteConfig) }
+	WriteConfig       struct{ SheetName, TagName string }
 )
 
 var defaultWriteConfig = func() *WriteConfig { return &WriteConfig{SheetName: "Sheet1", TagName: "excel"} }
@@ -60,7 +57,7 @@ func WriteTo[T WriteConfigurator](w io.Writer, ts []T) error {
 func write0[T WriteConfigurator](f *xlsx.File, ts []T) {
 	wc := defaultWriteConfig()
 	if len(ts) > 0 {
-		ts[0].Configure(wc)
+		ts[0].WriteConfigure(wc)
 	}
 	tT := new(T)
 	if sheet, _ := f.AddSheet(wc.SheetName); sheet != nil {

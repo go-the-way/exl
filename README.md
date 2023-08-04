@@ -17,6 +17,7 @@ package main
 
 import (
 	"fmt"
+	
 	"github.com/go-the-way/exl"
 )
 
@@ -25,7 +26,7 @@ type ReadExcel struct {
 	Name string `excel:"Name"`
 }
 
-func (*ReadExcel) Configure(rc *exl.ReadConfig) {}
+func (*ReadExcel) ReadConfigure(rc *exl.ReadConfig) {}
 
 func main() {
 	if models, err := exl.ReadFile[*ReadExcel]("/to/path.xlsx"); err != nil {
@@ -52,7 +53,7 @@ type WriteExcel struct {
 	Name string `excel:"Name"`
 }
 
-func (m *WriteExcel) Configure(wc *exl.WriteConfig) {}
+func (m *WriteExcel) WriteConfigure(wc *exl.WriteConfig) {}
 
 func main() {
 	if err := exl.Write("/to/path.xlsx", []*WriteExcel{{100, "apple"}, {200, "pear"}}); err != nil {

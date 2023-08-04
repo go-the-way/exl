@@ -22,10 +22,7 @@ import (
 )
 
 type (
-	Configurator[C any] interface {
-		Configure(c C)
-	}
-	ReadConfigurator interface{ Configurator[*ReadConfig] }
+	ReadConfigurator interface{ ReadConfigure(rc *ReadConfig) }
 	ReadConfig       struct {
 		TagName           string
 		SheetIndex        int
@@ -35,9 +32,8 @@ type (
 	}
 )
 
-var defaultReadConfig = func() *ReadConfig { return &ReadConfig{TagName: "excel", DataStartRowIndex: 1} }
-
 var (
+	defaultReadConfig              = func() *ReadConfig { return &ReadConfig{TagName: "excel", DataStartRowIndex: 1} }
 	ErrSheetIndexOutOfRange        = errors.New("exl: sheet index out of range")
 	ErrHeaderRowIndexOutOfRange    = errors.New("exl: header row index out of range")
 	ErrDataStartRowIndexOutOfRange = errors.New("exl: data start row index out of range")
@@ -77,7 +73,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	}
 	var t T
 	rc := defaultReadConfig()
-	t.Configure(rc)
+	t.ReadConfigure(rc)
 	if rc.SheetIndex < 0 || rc.SheetIndex > len(f.Sheet)-1 {
 		return nil, ErrSheetIndexOutOfRange
 	}
@@ -115,8 +111,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 						if fi, fa := fieldMap[header]; fa {
 							fie := val.Field(fi)
 							setValue(reflect.ValueOf(d), fie)
-							if trimSpace && (fie.Type().Kind() == reflect.String ||
-								(fie.Type().Kind() == reflect.Ptr && fie.Type().Elem().Kind() == reflect.String)) {
+							if trimSpace && (fie.Type().Kind() == reflect.String || (fie.Type().Kind() == reflect.Ptr && fie.Type().Elem().Kind() == reflect.String)) {
 								fie.SetString(strings.TrimSpace(fie.String()))
 							}
 						}
