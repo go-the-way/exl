@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tealeg/xlsx/v3"
 )
@@ -50,6 +51,195 @@ func (t *readHeaderRowIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
 
 func (t *readDataStartRowIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
 	rc.DataStartRowIndex = -1
+}
+
+func TestFieldErrorError(t *testing.T) {
+	fieldError := FieldError{
+		RowIndex:     2,
+		ColumnIndex:  7,
+		ColumnHeader: "CooLumm",
+		Err:          errors.New("unit test error"),
+	}
+
+	equal(t, "error unmarshaling column \"CooLumm\" in row 3: unit test error", fieldError.Error())
+}
+
+func TestFieldErrorUnwrap(t *testing.T) {
+	errUnit := errors.New("unit test error")
+	fieldError := FieldError{
+		Err: errUnit,
+	}
+
+	if !errors.Is(fieldError, errUnit) {
+		t.Error("FieldError unwrapping failed")
+	}
+}
+
+func TestContentErrorError(t *testing.T) {
+	t.Run("with limit reached", func(t *testing.T) {
+		contentError := ContentError{
+			FieldErrors: []FieldError{
+				{}, {},
+			},
+			LimitReached: true,
+		}
+		equal(t, "too many (2) errors reading data from Excel", contentError.Error())
+	})
+
+	t.Run("without limit reached", func(t *testing.T) {
+		contentError := ContentError{
+			FieldErrors: []FieldError{
+				{}, {},
+			},
+			LimitReached: false,
+		}
+		equal(t, "2 errors reading data from Excel", contentError.Error())
+	})
+}
+
+func TestContentErrorUnwrap(t *testing.T) {
+	errUnit := errors.New("unit test error")
+	contentError := ContentError{
+		FieldErrors: []FieldError{
+			{
+				Err: errUnit,
+			},
+		},
+	}
+
+	if !errors.Is(contentError, errUnit) {
+		t.Error("ContentError unwrapping failed")
+	}
+}
+
+type customUnmarshaledString string
+
+func (s *customUnmarshaledString) UnmarshalExcel(cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	if cell.Value == "error please" {
+		return errors.New("excel unmarshaled: unit test error")
+	} else {
+		*s = customUnmarshaledString("excel unmarshaled: " + cell.Value)
+		return nil
+	}
+}
+
+type textUnmarshaledString string
+
+func (s *textUnmarshaledString) UnmarshalText(text []byte) error {
+	strValue := string(text)
+	if strValue == "error please" {
+		return errors.New("text unmarshaled: unit test error")
+	} else {
+		*s = textUnmarshaledString("text unmarshaled: " + strValue)
+		return nil
+	}
+}
+
+func TestGetUnmarshalFunc(t *testing.T) {
+	type TestStruct struct {
+		ExcelUnmarshaled     customUnmarshaledString
+		TextUnmarshaled      textUnmarshaledString
+		TimeUnmarshaled      time.Time
+		PrimitiveUnmarshaled string
+	}
+
+	testStruct := &TestStruct{}
+	val := reflect.ValueOf(testStruct).Elem()
+
+	// Test cell with a value to be unmarshaled,
+	// using a date value so the time unmarshaler can use this.
+	// Every other unmarshaler will just use the raw string value
+	successfulCell := &xlsx.Cell{
+		Value:  "12000",
+		NumFmt: xlsx.DefaultDateTimeFormat,
+	}
+	// Test cell with a specific value which causes the dummy unmarshalers
+	// to explicitly cause errors, and the string unmarshaler to error out due to a formatting issue.
+	errorCell := &xlsx.Cell{
+		Value:  "error please",
+		NumFmt: "<><><>error<><><>",
+	}
+
+	params := &ExcelUnmarshalParameters{}
+
+	t.Run("ExcelUnmarshaler", func(t *testing.T) {
+		field := val.FieldByName("ExcelUnmarshaled")
+		unmarshaler := GetUnmarshalFunc(field)
+		if unmarshaler == nil {
+			t.Fatal("expected an unmarshaler func, got nil")
+		}
+
+		t.Run("successful", func(t *testing.T) {
+			err := unmarshaler(field, successfulCell, params)
+			if err != nil {
+				t.Error("unexpected error:", err)
+			}
+			equal(t, customUnmarshaledString("excel unmarshaled: 12000"), testStruct.ExcelUnmarshaled)
+		})
+		t.Run("error", func(t *testing.T) {
+			err := unmarshaler(field, errorCell, params)
+			equal(t, "excel unmarshaled: unit test error", err.Error())
+		})
+	})
+
+	t.Run("TextUnmarshaler", func(t *testing.T) {
+		field := val.FieldByName("TextUnmarshaled")
+		unmarshaler := GetUnmarshalFunc(field)
+		if unmarshaler == nil {
+			t.Fatal("expected an unmarshaler func, got nil")
+		}
+
+		t.Run("successful", func(t *testing.T) {
+			err := unmarshaler(field, successfulCell, params)
+			if err != nil {
+				t.Error("unexpected error:", err)
+			}
+			equal(t, textUnmarshaledString("text unmarshaled: 12000"), testStruct.TextUnmarshaled)
+		})
+		t.Run("error", func(t *testing.T) {
+			err := unmarshaler(field, errorCell, params)
+			equal(t, "text unmarshaled: unit test error", err.Error())
+		})
+	})
+
+	t.Run("Time", func(t *testing.T) {
+		field := val.FieldByName("TimeUnmarshaled")
+		unmarshaler := GetUnmarshalFunc(field)
+		if unmarshaler == nil {
+			t.Fatal("expected an unmarshaler func, got nil")
+		}
+
+		t.Run("successful", func(t *testing.T) {
+			err := unmarshaler(field, successfulCell, params)
+			if err != nil {
+				t.Error("unexpected error:", err)
+			}
+			equal(t, time.Date(1932, time.November, 7, 0, 0, 0, 0, time.UTC), testStruct.TimeUnmarshaled)
+		})
+		t.Run("error", func(t *testing.T) {
+			err := unmarshaler(field, errorCell, params)
+			equal(t, "error parsing cell as date/time value: no recognized format", err.Error())
+		})
+	})
+	t.Run("Primitive", func(t *testing.T) {
+		field := val.FieldByName("PrimitiveUnmarshaled")
+		unmarshaler := GetUnmarshalFunc(field)
+		if unmarshaler == nil {
+			t.Fatal("expected an unmarshaler func, got nil")
+		}
+
+		t.Run("successful", func(t *testing.T) {
+			err := unmarshaler(field, successfulCell, params)
+			if err != nil {
+				t.Error("unexpected error:", err)
+			}
+			equal(t, "12000", testStruct.PrimitiveUnmarshaled)
+		})
+		t.Run("error", func(t *testing.T) {
+			err := unmarshaler(field, errorCell, params)
+			equal(t, "error formatting string value: invalid formatting code: unsupported or unescaped characters", err.Error())
+		})
+	})
 }
 
 func TestReadFileErr(t *testing.T) {
@@ -204,6 +394,230 @@ func TestReadTrimSpace(t *testing.T) {
 	} else if models[0].Name1 != "Name1" || models[1].Name2 != "Name22" || models[2].Name3 != "Name333" {
 		t.Error("test failed")
 	}
+}
+
+type missingColumnsAllowed struct {
+	Name1 string `excel:"Name1"`
+}
+
+func (*missingColumnsAllowed) ReadConfigure(rc *ReadConfig) {
+	rc.SkipUnknownColumns = true
+}
+
+type missingColumnsNotAllowed struct {
+	Name1 string `excel:"Name1"`
+}
+
+func (*missingColumnsNotAllowed) ReadConfigure(rc *ReadConfig) {
+	rc.SkipUnknownColumns = false
+}
+
+func TestReadSkipColumns(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1", "Name2", "Name3", "Name4", "Name5"},
+		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
+		{"Name11", "Name22 ", "Name33", "Name44", "Name55"},
+		{"Name111", "Name222 ", "Name333 ", "Name444", "Name555"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+
+	t.Run("allow missing columns", func(t *testing.T) {
+		if _, err := ReadFile[*missingColumnsAllowed](testFile); err != nil {
+			t.Error("test failed:", err)
+		}
+	})
+	t.Run("disallow missing columns", func(t *testing.T) {
+		_, err := ReadFile[*missingColumnsNotAllowed](testFile)
+		if err == nil {
+			t.Error("test failed: expected error, got nil")
+		} else {
+			equal(t, "no destination field with matching tag for column \"Name2\" at index 1", err.Error())
+		}
+	})
+}
+
+type missingTypesAllowed struct {
+	// Using error as field type,
+	// as error is an interface and thus
+	// not unmarshalable without concrete type
+	Name1 error `excel:"Name1"`
+}
+
+func (*missingTypesAllowed) ReadConfigure(rc *ReadConfig) {
+	rc.SkipUnknownTypes = true
+}
+
+type missingTypesNotAllowed struct {
+	// Using error as field type,
+	// as error is an interface and thus
+	// not unmarshalable without concrete type
+	Name1 error `excel:"Name1"`
+}
+
+func (*missingTypesNotAllowed) ReadConfigure(rc *ReadConfig) {
+	rc.SkipUnknownTypes = false
+}
+
+func TestReadSkipTypes(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1"},
+		{"Name1 Content"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+
+	t.Run("allow missing unmarshalers", func(t *testing.T) {
+		if _, err := ReadFile[*missingTypesAllowed](testFile); err != nil {
+			t.Error("test failed:", err)
+		}
+	})
+	t.Run("disallow missing unmarshalers", func(t *testing.T) {
+		_, err := ReadFile[*missingTypesNotAllowed](testFile)
+		if err == nil {
+			t.Error("test failed: expected error, got nil")
+		} else {
+			equal(t, "no unmarshaler for column \"Name1\" at index 0", err.Error())
+		}
+	})
+}
+
+type ignoreUnmarshalErrors struct {
+	Name1 customUnmarshaledString `excel:"Name1"`
+}
+
+func (*ignoreUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
+	rc.UnmarshalErrorHandling = UnmarshalErrorIgnore
+}
+
+type abortUnmarshalErrors struct {
+	Name1 customUnmarshaledString `excel:"Name1"`
+}
+
+func (*abortUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
+	rc.UnmarshalErrorHandling = UnmarshalErrorAbort
+}
+
+type collectUnmarshalErrors struct {
+	Name1 customUnmarshaledString `excel:"Name1"`
+}
+
+func (*collectUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
+	rc.UnmarshalErrorHandling = UnmarshalErrorCollect
+	rc.MaxUnmarshalErrors = 2
+}
+
+type collectUnmarshalErrorsUnlimited struct {
+	Name1 customUnmarshaledString `excel:"Name1"`
+}
+
+func (*collectUnmarshalErrorsUnlimited) ReadConfigure(rc *ReadConfig) {
+	rc.UnmarshalErrorHandling = UnmarshalErrorCollect
+	rc.MaxUnmarshalErrors = 0
+}
+
+func TestUnmarshalErrors(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1"},
+		{"error please"},
+		{"error please"},
+		{"error please"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+
+	t.Run("ignore unmarshal errors", func(t *testing.T) {
+		model, err := ReadFile[*ignoreUnmarshalErrors](testFile)
+		if err != nil {
+			t.Error("test failed:", err)
+		}
+		equal(t, customUnmarshaledString(""), model[0].Name1)
+	})
+	t.Run("abort at first error", func(t *testing.T) {
+		model, err := ReadFile[*abortUnmarshalErrors](testFile)
+		if err == nil {
+			t.Error("test failed: expected error, got nil")
+		} else {
+			equal(t, FieldError{
+				RowIndex:     1,
+				ColumnIndex:  0,
+				ColumnHeader: "Name1",
+				Err:          errors.New("excel unmarshaled: unit test error"),
+			}, err)
+			if model != nil {
+				t.Error("test failed: expected nil result, got:", model)
+			}
+		}
+	})
+	t.Run("collect errors limited", func(t *testing.T) {
+		model, err := ReadFile[*collectUnmarshalErrors](testFile)
+		if err == nil {
+			t.Error("test failed: expected error, got nil")
+		} else {
+			equal(t, ContentError{
+				FieldErrors: []FieldError{
+					{
+						RowIndex:     1,
+						ColumnIndex:  0,
+						ColumnHeader: "Name1",
+						Err:          errors.New("excel unmarshaled: unit test error"),
+					},
+					{
+						RowIndex:     2,
+						ColumnIndex:  0,
+						ColumnHeader: "Name1",
+						Err:          errors.New("excel unmarshaled: unit test error"),
+					},
+				},
+				LimitReached: true,
+			}, err)
+			if model != nil {
+				t.Error("test failed: expected nil result, got:", model)
+			}
+		}
+	})
+	t.Run("collect errors unlimited", func(t *testing.T) {
+		model, err := ReadFile[*collectUnmarshalErrorsUnlimited](testFile)
+		if err == nil {
+			t.Error("test failed: expected error, got nil")
+		} else {
+			equal(t, ContentError{
+				FieldErrors: []FieldError{
+					{
+						RowIndex:     1,
+						ColumnIndex:  0,
+						ColumnHeader: "Name1",
+						Err:          errors.New("excel unmarshaled: unit test error"),
+					},
+					{
+						RowIndex:     2,
+						ColumnIndex:  0,
+						ColumnHeader: "Name1",
+						Err:          errors.New("excel unmarshaled: unit test error"),
+					},
+					{
+						RowIndex:     3,
+						ColumnIndex:  0,
+						ColumnHeader: "Name1",
+						Err:          errors.New("excel unmarshaled: unit test error"),
+					},
+				},
+				LimitReached: false,
+			}, err)
+			if model != nil {
+				t.Error("test failed: expected nil result, got:", model)
+			}
+		}
+	})
 }
 
 func TestReadFilterFunc(t *testing.T) {

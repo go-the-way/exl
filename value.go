@@ -12,108 +12,201 @@
 package exl
 
 import (
+	"encoding"
+	"errors"
 	"fmt"
 	"reflect"
-	"strconv"
+	"strings"
+	"time"
+
+	"github.com/tealeg/xlsx/v3"
 )
 
-func setValue(srcValue, distValue reflect.Value) {
-	switch distValue.Kind() {
-	case reflect.String:
-		setStringValue(srcValue, distValue)
-	case reflect.Bool:
-		setBoolValue(srcValue, distValue)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		setIntValue(srcValue, distValue)
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		setUintValue(srcValue, distValue)
-	case reflect.Float32, reflect.Float64:
-		setFloatValue(srcValue, distValue)
-	default:
-		if srcValue.Type() == distValue.Type() {
-			distValue.Set(srcValue)
+var ErrNegativeUInt = errors.New("negative integer provided for unsigned field")
+var ErrOverflow = errors.New("numeric overflow, number is too large for this field")
+var ErrNoRecognizedFormat = errors.New("no recognized format")
+
+// ErrCannotCastUnmarshaler is returned in case a field technically implements an unmarshaler interface,
+// but casting to it at runtime failed for some reason.
+var ErrCannotCastUnmarshaler = errors.New("cannot cast to unmarshaler interface")
+
+var DefaultUnmarshalFuncs = map[reflect.Kind]UnmarshalExcelFunc{
+	reflect.String:  UnmarshalString,
+	reflect.Bool:    UnmarshalBool,
+	reflect.Int:     UnmarshalInt,
+	reflect.Int8:    UnmarshalInt,
+	reflect.Int16:   UnmarshalInt,
+	reflect.Int32:   UnmarshalInt,
+	reflect.Int64:   UnmarshalInt,
+	reflect.Uint:    UnmarshalUInt,
+	reflect.Uintptr: UnmarshalUInt,
+	reflect.Uint8:   UnmarshalUInt,
+	reflect.Uint16:  UnmarshalUInt,
+	reflect.Uint32:  UnmarshalUInt,
+	reflect.Uint64:  UnmarshalUInt,
+	reflect.Float32: UnmarshalFloat,
+	reflect.Float64: UnmarshalFloat,
+}
+
+type ExcelUnmarshalParameters struct {
+	// See ReadConfig.TrimSpace
+	TrimSpace bool
+	// See xlsx.File.Date1904
+	Date1904 bool
+	// See ReadConfig.FallbackDateFormats
+	FallbackDateFormats []string
+}
+
+type ExcelUnmarshaler interface {
+	UnmarshalExcel(cell *xlsx.Cell, params *ExcelUnmarshalParameters) error
+}
+
+type UnmarshalExcelFunc func(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error
+
+func UnmarshalString(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	str, err := cell.FormattedValue()
+	if err != nil {
+		return fmt.Errorf("error formatting string value: %w", err)
+	}
+	if params.TrimSpace {
+		str = strings.TrimSpace(str)
+	}
+	destValue.SetString(str)
+	return nil
+}
+
+func UnmarshalBool(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	destValue.SetBool(cell.Bool())
+	return nil
+}
+
+func UnmarshalInt(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	val, err := cell.Int64()
+	if err != nil {
+		return fmt.Errorf("error parsing cell as integer value: %w", err)
+	}
+	if destValue.OverflowInt(val) {
+		return ErrOverflow
+	}
+	destValue.SetInt(val)
+	return nil
+}
+
+func UnmarshalUInt(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	val, err := cell.Int64()
+	if err != nil {
+		return fmt.Errorf("error parsing cell as integer value: %w", err)
+	}
+	if val < 0 {
+		return ErrNegativeUInt
+	}
+	uval := uint64(val)
+	if destValue.OverflowUint(uval) {
+		return ErrOverflow
+	}
+	destValue.SetUint(uval)
+	return nil
+}
+
+func UnmarshalFloat(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	val, err := cell.Float()
+	if err != nil {
+		return fmt.Errorf("error parsing cell as float value: %w", err)
+	}
+	if destValue.OverflowFloat(val) {
+		return ErrOverflow
+	}
+	destValue.SetFloat(val)
+	return nil
+}
+
+func UnmarshalTime(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+	var val time.Time
+	if cell.IsTime() {
+		var err error
+		val, err = cell.GetTime(params.Date1904)
+		if err != nil {
+			var ok bool
+			val, ok = unmarshalTimeFallback(cell.Value, params.FallbackDateFormats)
+			if !ok {
+				return fmt.Errorf("error parsing cell as date/time value: %w", err)
+			}
+		}
+	} else {
+		var ok bool
+		val, ok = unmarshalTimeFallback(cell.Value, params.FallbackDateFormats)
+		if !ok {
+			return fmt.Errorf("error parsing cell as date/time value: %w", ErrNoRecognizedFormat)
 		}
 	}
+	destValue.Set(reflect.ValueOf(val))
+	return nil
 }
 
-func setStringValue(srcValue, distValue reflect.Value) {
-	switch srcValue.Kind() {
-	// Interface->String
-	default:
-		if srcValue.CanInterface() {
-			distValue.SetString(fmt.Sprintf("%v", srcValue.Interface()))
+func unmarshalTimeFallback(value string, formats []string) (time.Time, bool) {
+	for _, format := range formats {
+		val, err := time.Parse(format, value)
+		if err == nil {
+			return val, true
 		}
-	// String->String
-	case reflect.String:
-		distValue.SetString(srcValue.String())
 	}
+	return time.Time{}, false
 }
 
-func setBoolValue(srcValue, distValue reflect.Value) {
-	switch srcValue.Kind() {
-	// String->Bool
-	case reflect.String:
-		boolVal, _ := strconv.ParseBool(srcValue.String())
-		distValue.SetBool(boolVal)
-	// Bool->Bool
-	case reflect.Bool:
-		distValue.Set(srcValue)
+func getFieldInterface(destField reflect.Value) any {
+	destFieldPointer := destField
+
+	// Same logic as json.Unmarshal is using:
+	// If the field has a named type and is addressable,
+	// start with its address, so that if the type has pointer methods,
+	// we find them.
+	// Usually unmarshaler implementations are on the pointer type,
+	// so that they can actually write back to the field when called.
+	if destField.Kind() != reflect.Pointer && destField.Type().Name() != "" && destField.CanAddr() {
+		destFieldPointer = destField.Addr()
 	}
+
+	if !destField.CanInterface() {
+		return nil
+	}
+
+	return destFieldPointer.Interface()
 }
 
-// set int value
-func setIntValue(srcValue, distValue reflect.Value) {
-	switch srcValue.Kind() {
-	// String->Int
-	case reflect.String:
-		floatVal, _ := strconv.ParseFloat(srcValue.String(), 64)
-		distValue.SetInt(int64(floatVal))
-	// Float->Int
-	case reflect.Float32, reflect.Float64:
-		distValue.SetInt(int64(srcValue.Float()))
-	// Uint->Int
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		distValue.SetInt(int64(srcValue.Uint()))
-	// Int->Int
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		distValue.SetInt(srcValue.Int())
+func UnmarshalExcelUnmarshaler(destField reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+
+	intf := getFieldInterface(destField)
+	if intf == nil {
+		// This should not happen at runtime,
+		// as we have alread cast successfully to get here
+		return ErrCannotCastUnmarshaler
 	}
+
+	unmarshaler, ok := intf.(ExcelUnmarshaler)
+	if !ok {
+		// This should not happen at runtime,
+		// as we have alread cast successfully to get here
+		return ErrCannotCastUnmarshaler
+	}
+
+	return unmarshaler.UnmarshalExcel(cell, params)
 }
 
-// set uint value
-func setUintValue(srcValue, distValue reflect.Value) {
-	switch srcValue.Kind() {
-	// String->Uint
-	case reflect.String:
-		floatVal, _ := strconv.ParseFloat(srcValue.String(), 64)
-		distValue.SetUint(uint64(floatVal))
-	// Float->Uint
-	case reflect.Float32, reflect.Float64:
-		distValue.SetUint(uint64(srcValue.Float()))
-	// Int->Uint
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		distValue.SetUint(uint64(srcValue.Int()))
-	// Uint->Uint
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		distValue.SetUint(srcValue.Uint())
-	}
-}
+func UnmarshalTextUnmarshaler(destField reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
 
-// set float value
-func setFloatValue(srcValue, distValue reflect.Value) {
-	switch srcValue.Kind() {
-	// String->Float
-	case reflect.String:
-		floatVal, _ := strconv.ParseFloat(srcValue.String(), 64)
-		distValue.SetFloat(floatVal)
-	// Int->Float
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		distValue.SetFloat(float64(srcValue.Int()))
-	// Uint->Float
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		distValue.SetFloat(float64(srcValue.Uint()))
-	// Float->Float
-	case reflect.Float32, reflect.Float64:
-		distValue.SetFloat(srcValue.Float())
+	intf := getFieldInterface(destField)
+	if intf == nil {
+		// This should not happen at runtime,
+		// as we have alread cast successfully to get here
+		return ErrCannotCastUnmarshaler
 	}
+
+	unmarshaler, ok := intf.(encoding.TextUnmarshaler)
+	if !ok {
+		// This should not happen at runtime,
+		// as we have alread cast successfully to get here
+		return ErrCannotCastUnmarshaler
+	}
+
+	return unmarshaler.UnmarshalText([]byte(cell.Value))
 }
