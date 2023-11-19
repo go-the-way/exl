@@ -57,11 +57,11 @@ func TestFieldErrorError(t *testing.T) {
 	fieldError := FieldError{
 		RowIndex:     2,
 		ColumnIndex:  7,
-		ColumnHeader: "CooLumm",
+		ColumnHeader: "ColumnX",
 		Err:          errors.New("unit test error"),
 	}
 
-	equal(t, "error unmarshaling column \"CooLumm\" in row 3: unit test error", fieldError.Error())
+	equal(t, "error unmarshalling column \"ColumnX\" in row 3: unit test error", fieldError.Error())
 }
 
 func TestFieldErrorUnwrap(t *testing.T) {

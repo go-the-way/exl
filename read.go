@@ -60,8 +60,8 @@ type (
 		// or caused an error when determining the unmarshaler to use.
 		// Defaults to false.
 		SkipUnknownTypes bool
-		// Configure how errors during unmarshaling are handled.
-		// Unmarshaling errors are e.g. invalid number formats in the cell,
+		// Configure how errors during unmarshalling are handled.
+		// Unmarshalling errors are e.g. invalid number formats in the cell,
 		// date parsing with invalid input,
 		// or attempting to unmarshal non-numeric text into a numeric field.
 		// Defaults to UnmarshalErrorAbort.
@@ -99,9 +99,10 @@ var (
 
 // Error implements error.
 func (e FieldError) Error() string {
-	return fmt.Sprintf("error unmarshaling column \"%s\" in row %d: %s", e.ColumnHeader, e.RowIndex+1, e.Err.Error())
+	return fmt.Sprintf("error unmarshalling column \"%s\" in row %d: %s", e.ColumnHeader, e.RowIndex+1, e.Err.Error())
 }
 
+// Unwrap
 // Error implements the anonymous unwrap interface used by errors.Unwrap and others.
 func (e FieldError) Unwrap() error {
 	return e.Err
@@ -116,6 +117,7 @@ func (e ContentError) Error() string {
 	}
 }
 
+// Unwrap
 // Error implements the anonymous unwrap interface used by errors.Unwrap and others.
 func (e ContentError) Unwrap() []error {
 	// Slice needs to be type-adjusted
@@ -127,11 +129,14 @@ func (e ContentError) Unwrap() []error {
 }
 
 const (
-	// Ignore any errors during unmarshaling
+	// UnmarshalErrorIgnore
+	// Ignore any errors during unmarshalling
 	UnmarshalErrorIgnore UnmarshalErrorHandling = iota
-	// Abort reading when encountering the first unmarshaling error
+	// UnmarshalErrorAbort
+	// Abort reading when encountering the first unmarshalling error
 	UnmarshalErrorAbort
-	// Collect unmarshaling errors up to a limit, but continue reading.
+	// UnmarshalErrorCollect
+	// Collect unmarshalling errors up to a limit, but continue reading.
 	// Collected errors are returned as one error at the end, of type
 	UnmarshalErrorCollect
 )
@@ -164,11 +169,11 @@ func readStrings(maxCol int, row *xlsx.Row) []string {
 func GetUnmarshalFunc(destField reflect.Value) UnmarshalExcelFunc {
 	if destField.CanInterface() {
 
-		intf := getFieldInterface(destField)
-		if intf != nil {
+		inf := getFieldInterface(destField)
+		if inf != nil {
 
 			// Prefer ExcelUnmarshaler, if implemented
-			if _, ok := intf.(ExcelUnmarshaler); ok {
+			if _, ok := inf.(ExcelUnmarshaler); ok {
 				return UnmarshalExcelUnmarshaler
 			}
 
@@ -178,14 +183,14 @@ func GetUnmarshalFunc(destField reflect.Value) UnmarshalExcelFunc {
 			}
 
 			// Then utilize TextUnmarshaler, e.g. for things like decimal.Decimal
-			if _, ok := intf.(encoding.TextUnmarshaler); ok {
+			if _, ok := inf.(encoding.TextUnmarshaler); ok {
 				return UnmarshalTextUnmarshaler
 			}
 
 		}
 	}
 
-	// And for primitive types, use custom unmarshaling funcs
+	// And for primitive types, use custom unmarshalling func
 	kind := destField.Type().Kind()
 	if kind == reflect.Ptr {
 		kind = destField.Type().Elem().Kind()
@@ -216,6 +221,12 @@ func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool
 	}
 }
 
+type fieldInfo struct {
+	reflectFieldIndex int
+	header            string
+	unmarshalFunc     UnmarshalExcelFunc
+}
+
 // ReadBinary each row bind to `T`
 func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	f, err := xlsx.OpenBinary(bytes)
@@ -238,16 +249,12 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	headerRow, _ := sheet.Row(rc.HeaderRowIndex)
 	maxCol := sheet.MaxCol
 	headers := readStrings(maxCol, headerRow)
-	type fieldInfo struct {
-		reflectFieldIndex int
-		header            string
-		unmarshalFunc     UnmarshalExcelFunc
-	}
+
 	// Key: Header / Tag name
 	// Value: Reflection field index
-	tagToFieldMap := make(map[string]int, 0)
+	tagToFieldMap := make(map[string]int)
 	// Key: Column Index
-	// Value: Unmarshaling Info
+	// Value: Unmarshalling Info
 	columnFields := make([]fieldInfo, len(headers))
 
 	typ := reflect.TypeOf(t).Elem()
@@ -329,16 +336,16 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 					destField := val.Field(fi.reflectFieldIndex)
 					err = fi.unmarshalFunc(destField, cell, unmarshalConfig)
 					if err != nil && rc.UnmarshalErrorHandling != UnmarshalErrorIgnore {
-						ferr := FieldError{
+						fer := FieldError{
 							RowIndex:     rowIndex,
 							ColumnIndex:  columnIndex,
 							ColumnHeader: fi.header,
 							Err:          err,
 						}
 						if rc.UnmarshalErrorHandling == UnmarshalErrorAbort {
-							return nil, ferr
+							return nil, fer
 						} else {
-							collectedErrors = append(collectedErrors, ferr)
+							collectedErrors = append(collectedErrors, fer)
 							if rc.MaxUnmarshalErrors > 0 && uint64(len(collectedErrors)) >= rc.MaxUnmarshalErrors {
 								return nil, ContentError{
 									FieldErrors:  collectedErrors,
