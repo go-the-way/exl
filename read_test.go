@@ -112,41 +112,41 @@ func TestContentErrorUnwrap(t *testing.T) {
 	}
 }
 
-type customUnmarshaledString string
+type customUnmarshalledString string
 
-func (s *customUnmarshaledString) UnmarshalExcel(cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+func (s *customUnmarshalledString) UnmarshalExcel(cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
 	if cell.Value == "error please" {
-		return errors.New("excel unmarshaled: unit test error")
+		return errors.New("excel unmarshalled: unit test error")
 	} else {
-		*s = customUnmarshaledString("excel unmarshaled: " + cell.Value)
+		*s = customUnmarshalledString("excel unmarshalled: " + cell.Value)
 		return nil
 	}
 }
 
-type textUnmarshaledString string
+type textUnmarshalledString string
 
-func (s *textUnmarshaledString) UnmarshalText(text []byte) error {
+func (s *textUnmarshalledString) UnmarshalText(text []byte) error {
 	strValue := string(text)
 	if strValue == "error please" {
-		return errors.New("text unmarshaled: unit test error")
+		return errors.New("text unmarshalled: unit test error")
 	} else {
-		*s = textUnmarshaledString("text unmarshaled: " + strValue)
+		*s = textUnmarshalledString("text unmarshalled: " + strValue)
 		return nil
 	}
 }
 
 func TestGetUnmarshalFunc(t *testing.T) {
 	type TestStruct struct {
-		ExcelUnmarshaled     customUnmarshaledString
-		TextUnmarshaled      textUnmarshaledString
-		TimeUnmarshaled      time.Time
-		PrimitiveUnmarshaled string
+		ExcelUnmarshalled     customUnmarshalledString
+		TextUnmarshalled      textUnmarshalledString
+		TimeUnmarshalled      time.Time
+		PrimitiveUnmarshalled string
 	}
 
 	testStruct := &TestStruct{}
 	val := reflect.ValueOf(testStruct).Elem()
 
-	// Test cell with a value to be unmarshaled,
+	// Test cell with a value to be unmarshalled,
 	// using a date value so the time unmarshaler can use this.
 	// Every other unmarshaler will just use the raw string value
 	successfulCell := &xlsx.Cell{
@@ -163,7 +163,7 @@ func TestGetUnmarshalFunc(t *testing.T) {
 	params := &ExcelUnmarshalParameters{}
 
 	t.Run("ExcelUnmarshaler", func(t *testing.T) {
-		field := val.FieldByName("ExcelUnmarshaled")
+		field := val.FieldByName("ExcelUnmarshalled")
 		unmarshaler := GetUnmarshalFunc(field)
 		if unmarshaler == nil {
 			t.Fatal("expected an unmarshaler func, got nil")
@@ -174,16 +174,16 @@ func TestGetUnmarshalFunc(t *testing.T) {
 			if err != nil {
 				t.Error("unexpected error:", err)
 			}
-			equal(t, customUnmarshaledString("excel unmarshaled: 12000"), testStruct.ExcelUnmarshaled)
+			equal(t, customUnmarshalledString("excel unmarshalled: 12000"), testStruct.ExcelUnmarshalled)
 		})
 		t.Run("error", func(t *testing.T) {
 			err := unmarshaler(field, errorCell, params)
-			equal(t, "excel unmarshaled: unit test error", err.Error())
+			equal(t, "excel unmarshalled: unit test error", err.Error())
 		})
 	})
 
 	t.Run("TextUnmarshaler", func(t *testing.T) {
-		field := val.FieldByName("TextUnmarshaled")
+		field := val.FieldByName("TextUnmarshalled")
 		unmarshaler := GetUnmarshalFunc(field)
 		if unmarshaler == nil {
 			t.Fatal("expected an unmarshaler func, got nil")
@@ -194,16 +194,16 @@ func TestGetUnmarshalFunc(t *testing.T) {
 			if err != nil {
 				t.Error("unexpected error:", err)
 			}
-			equal(t, textUnmarshaledString("text unmarshaled: 12000"), testStruct.TextUnmarshaled)
+			equal(t, textUnmarshalledString("text unmarshalled: 12000"), testStruct.TextUnmarshalled)
 		})
 		t.Run("error", func(t *testing.T) {
 			err := unmarshaler(field, errorCell, params)
-			equal(t, "text unmarshaled: unit test error", err.Error())
+			equal(t, "text unmarshalled: unit test error", err.Error())
 		})
 	})
 
 	t.Run("Time", func(t *testing.T) {
-		field := val.FieldByName("TimeUnmarshaled")
+		field := val.FieldByName("TimeUnmarshalled")
 		unmarshaler := GetUnmarshalFunc(field)
 		if unmarshaler == nil {
 			t.Fatal("expected an unmarshaler func, got nil")
@@ -214,7 +214,7 @@ func TestGetUnmarshalFunc(t *testing.T) {
 			if err != nil {
 				t.Error("unexpected error:", err)
 			}
-			equal(t, time.Date(1932, time.November, 7, 0, 0, 0, 0, time.UTC), testStruct.TimeUnmarshaled)
+			equal(t, time.Date(1932, time.November, 7, 0, 0, 0, 0, time.UTC), testStruct.TimeUnmarshalled)
 		})
 		t.Run("error", func(t *testing.T) {
 			err := unmarshaler(field, errorCell, params)
@@ -222,7 +222,7 @@ func TestGetUnmarshalFunc(t *testing.T) {
 		})
 	})
 	t.Run("Primitive", func(t *testing.T) {
-		field := val.FieldByName("PrimitiveUnmarshaled")
+		field := val.FieldByName("PrimitiveUnmarshalled")
 		unmarshaler := GetUnmarshalFunc(field)
 		if unmarshaler == nil {
 			t.Fatal("expected an unmarshaler func, got nil")
@@ -233,7 +233,7 @@ func TestGetUnmarshalFunc(t *testing.T) {
 			if err != nil {
 				t.Error("unexpected error:", err)
 			}
-			equal(t, "12000", testStruct.PrimitiveUnmarshaled)
+			equal(t, "12000", testStruct.PrimitiveUnmarshalled)
 		})
 		t.Run("error", func(t *testing.T) {
 			err := unmarshaler(field, errorCell, params)
@@ -489,7 +489,7 @@ func TestReadSkipTypes(t *testing.T) {
 }
 
 type ignoreUnmarshalErrors struct {
-	Name1 customUnmarshaledString `excel:"Name1"`
+	Name1 customUnmarshalledString `excel:"Name1"`
 }
 
 func (*ignoreUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
@@ -497,7 +497,7 @@ func (*ignoreUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
 }
 
 type abortUnmarshalErrors struct {
-	Name1 customUnmarshaledString `excel:"Name1"`
+	Name1 customUnmarshalledString `excel:"Name1"`
 }
 
 func (*abortUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
@@ -505,7 +505,7 @@ func (*abortUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
 }
 
 type collectUnmarshalErrors struct {
-	Name1 customUnmarshaledString `excel:"Name1"`
+	Name1 customUnmarshalledString `excel:"Name1"`
 }
 
 func (*collectUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
@@ -514,7 +514,7 @@ func (*collectUnmarshalErrors) ReadConfigure(rc *ReadConfig) {
 }
 
 type collectUnmarshalErrorsUnlimited struct {
-	Name1 customUnmarshaledString `excel:"Name1"`
+	Name1 customUnmarshalledString `excel:"Name1"`
 }
 
 func (*collectUnmarshalErrorsUnlimited) ReadConfigure(rc *ReadConfig) {
@@ -540,7 +540,7 @@ func TestUnmarshalErrors(t *testing.T) {
 		if err != nil {
 			t.Error("test failed:", err)
 		}
-		equal(t, customUnmarshaledString(""), model[0].Name1)
+		equal(t, customUnmarshalledString(""), model[0].Name1)
 	})
 	t.Run("abort at first error", func(t *testing.T) {
 		model, err := ReadFile[*abortUnmarshalErrors](testFile)
@@ -551,7 +551,7 @@ func TestUnmarshalErrors(t *testing.T) {
 				RowIndex:     1,
 				ColumnIndex:  0,
 				ColumnHeader: "Name1",
-				Err:          errors.New("excel unmarshaled: unit test error"),
+				Err:          errors.New("excel unmarshalled: unit test error"),
 			}, err)
 			if model != nil {
 				t.Error("test failed: expected nil result, got:", model)
@@ -569,13 +569,13 @@ func TestUnmarshalErrors(t *testing.T) {
 						RowIndex:     1,
 						ColumnIndex:  0,
 						ColumnHeader: "Name1",
-						Err:          errors.New("excel unmarshaled: unit test error"),
+						Err:          errors.New("excel unmarshalled: unit test error"),
 					},
 					{
 						RowIndex:     2,
 						ColumnIndex:  0,
 						ColumnHeader: "Name1",
-						Err:          errors.New("excel unmarshaled: unit test error"),
+						Err:          errors.New("excel unmarshalled: unit test error"),
 					},
 				},
 				LimitReached: true,
@@ -596,19 +596,19 @@ func TestUnmarshalErrors(t *testing.T) {
 						RowIndex:     1,
 						ColumnIndex:  0,
 						ColumnHeader: "Name1",
-						Err:          errors.New("excel unmarshaled: unit test error"),
+						Err:          errors.New("excel unmarshalled: unit test error"),
 					},
 					{
 						RowIndex:     2,
 						ColumnIndex:  0,
 						ColumnHeader: "Name1",
-						Err:          errors.New("excel unmarshaled: unit test error"),
+						Err:          errors.New("excel unmarshalled: unit test error"),
 					},
 					{
 						RowIndex:     3,
 						ColumnIndex:  0,
 						ColumnHeader: "Name1",
-						Err:          errors.New("excel unmarshaled: unit test error"),
+						Err:          errors.New("excel unmarshalled: unit test error"),
 					},
 				},
 				LimitReached: false,
