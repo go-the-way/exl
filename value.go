@@ -166,10 +166,6 @@ func getFieldInterface(destField reflect.Value) any {
 		destFieldPointer = destField.Addr()
 	}
 
-	if !destField.CanInterface() {
-		return nil
-	}
-
 	return destFieldPointer.Interface()
 }
 
