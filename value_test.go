@@ -12,6 +12,7 @@
 package exl
 
 import (
+	"errors"
 	"math"
 	"reflect"
 	"testing"
@@ -30,6 +31,8 @@ type _model struct {
 	F   float64
 	F32 float32
 	T   time.Time
+	EU  customUnmarshalledString
+	TU  textUnmarshalledString
 
 	A any
 }
@@ -226,7 +229,7 @@ func TestUnmarshalFloat(t *testing.T) {
 		equal(t, -123.7, model.F)
 	})
 
-	t.Run("text cell", func(t *testing.T) {
+	t.Run("text cell with float value", func(t *testing.T) {
 		cell.SetValue("123.7")
 		err := UnmarshalFloat(destField, cell, &ExcelUnmarshalParameters{})
 		if err != nil {
@@ -251,6 +254,15 @@ func TestUnmarshalFloat(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected overflow error")
 		}
+	})
+
+	t.Run("text cell with non-numeric value returns error", func(t *testing.T) {
+		cell.SetValue("not a number")
+		err := UnmarshalFloat(destField, cell, &ExcelUnmarshalParameters{})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		equal(t, "error parsing cell as float value: strconv.ParseFloat: parsing \"not a number\": invalid syntax", err.Error())
 	})
 }
 
@@ -310,6 +322,60 @@ func TestUnmarshalTime(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
+	})
+}
+
+func TestUnmarshalExcelUnmarshaler(t *testing.T) {
+	model := &_model{}
+	destField := reflect.ValueOf(model).Elem().FieldByName("EU")
+	cell := &xlsx.Cell{}
+
+	t.Run("successful unmarshalling", func(t *testing.T) {
+		cell.SetString("unit test value")
+		err := UnmarshalExcelUnmarshaler(destField, cell, &ExcelUnmarshalParameters{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		equal(t, customUnmarshalledString("excel unmarshalled: unit test value"), model.EU)
+	})
+
+	t.Run("unsuccessful unmarshalling returns error", func(t *testing.T) {
+		cell.SetString("error please") // Trigger an error in the unmarshaller
+		err := UnmarshalExcelUnmarshaler(destField, cell, &ExcelUnmarshalParameters{})
+		equal(t, errors.New("excel unmarshalled: unit test error"), err)
+	})
+
+	t.Run("catch wrong type", func(t *testing.T) {
+		wrongField := reflect.ValueOf(model).Elem().FieldByName("TU")
+		err := UnmarshalExcelUnmarshaler(wrongField, cell, &ExcelUnmarshalParameters{})
+		equal(t, ErrCannotCastUnmarshaler, err)
+	})
+}
+
+func TestUnmarshalTextUnmarshaler(t *testing.T) {
+	model := &_model{}
+	destField := reflect.ValueOf(model).Elem().FieldByName("TU")
+	cell := &xlsx.Cell{}
+
+	t.Run("successful unmarshalling", func(t *testing.T) {
+		cell.SetString("unit test value")
+		err := UnmarshalTextUnmarshaler(destField, cell, &ExcelUnmarshalParameters{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		equal(t, textUnmarshalledString("text unmarshalled: unit test value"), model.TU)
+	})
+
+	t.Run("unsuccessful unmarshalling returns error", func(t *testing.T) {
+		cell.SetString("error please") // Trigger an error in the unmarshaller
+		err := UnmarshalTextUnmarshaler(destField, cell, &ExcelUnmarshalParameters{})
+		equal(t, errors.New("text unmarshalled: unit test error"), err)
+	})
+
+	t.Run("catch wrong type", func(t *testing.T) {
+		wrongField := reflect.ValueOf(model).Elem().FieldByName("EU")
+		err := UnmarshalTextUnmarshaler(wrongField, cell, &ExcelUnmarshalParameters{})
+		equal(t, ErrCannotCastUnmarshaler, err)
 	})
 }
 
