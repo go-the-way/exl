@@ -192,15 +192,34 @@ func GetUnmarshalFunc(destField reflect.Value) UnmarshalExcelFunc {
 
 	// And for primitive types, use custom unmarshalling func
 	kind := destField.Type().Kind()
+	isPointer := false
 	if kind == reflect.Ptr {
 		kind = destField.Type().Elem().Kind()
+		isPointer = true
 	}
 	unmarshalFunc, ok := DefaultUnmarshalFuncs[kind]
 	if ok {
+		if isPointer {
+			return func(destValue reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
+				reflect.New(destField.Type())
+				return unmarshalPointer(destValue, cell, params, unmarshalFunc)
+			}
+		}
 		return unmarshalFunc
 	}
 
 	return nil
+}
+
+func unmarshalPointer(destPointer reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters, unmarshalFunc UnmarshalExcelFunc) error {
+	// Create new pointer to the field value,
+	// as the pointer may be nil
+	elemType := destPointer.Type().Elem()
+	destPointer.Set(reflect.New(elemType))
+
+	// Unmarshal into that new value
+	destValue := destPointer.Elem()
+	return unmarshalFunc(destValue, cell, params)
 }
 
 // Read io.Reader each row bind to `T`

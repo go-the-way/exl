@@ -158,10 +158,11 @@ func (s *textUnmarshalledString) UnmarshalText(text []byte) error {
 
 func TestGetUnmarshalFunc(t *testing.T) {
 	type TestStruct struct {
-		ExcelUnmarshalled     customUnmarshalledString
-		TextUnmarshalled      textUnmarshalledString
-		TimeUnmarshalled      time.Time
-		PrimitiveUnmarshalled string
+		ExcelUnmarshalled            customUnmarshalledString
+		TextUnmarshalled             textUnmarshalledString
+		TimeUnmarshalled             time.Time
+		PrimitiveUnmarshalled        string
+		PrimitivePointerUnmarshalled *string
 	}
 
 	testStruct := &TestStruct{}
@@ -255,6 +256,26 @@ func TestGetUnmarshalFunc(t *testing.T) {
 				t.Error("unexpected error:", err)
 			}
 			equal(t, "12000", testStruct.PrimitiveUnmarshalled)
+		})
+		t.Run("error", func(t *testing.T) {
+			err := unmarshaler(field, errorCell, params)
+			equal(t, "error formatting string value: invalid formatting code: unsupported or unescaped characters", err.Error())
+		})
+	})
+	t.Run("Primitive Pointer", func(t *testing.T) {
+		field := val.FieldByName("PrimitivePointerUnmarshalled")
+		unmarshaler := GetUnmarshalFunc(field)
+		if unmarshaler == nil {
+			t.Fatal("expected an unmarshaler func, got nil")
+		}
+
+		t.Run("successful", func(t *testing.T) {
+			err := unmarshaler(field, successfulCell, params)
+			if err != nil {
+				t.Error("unexpected error:", err)
+			}
+			expected := "12000"
+			equal(t, &expected, testStruct.PrimitivePointerUnmarshalled)
 		})
 		t.Run("error", func(t *testing.T) {
 			err := unmarshaler(field, errorCell, params)
