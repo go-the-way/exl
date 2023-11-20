@@ -64,7 +64,7 @@ func TestFieldErrorError(t *testing.T) {
 	equal(t, "error unmarshalling column \"ColumnX\" in row 3: unit test error", fieldError.Error())
 }
 
-func TestFieldErrorUnwrap(t *testing.T) {
+func TestFieldErrorIs(t *testing.T) {
 	errUnit := errors.New("unit test error")
 	fieldError := FieldError{
 		Err: errUnit,
@@ -73,6 +73,16 @@ func TestFieldErrorUnwrap(t *testing.T) {
 	if !errors.Is(fieldError, errUnit) {
 		t.Error("FieldError unwrapping failed")
 	}
+}
+
+func TestFieldErrorUnwrap(t *testing.T) {
+	errUnit := errors.New("unit test error")
+	fieldError := FieldError{
+		Err: errUnit,
+	}
+
+	unwrapped := fieldError.Unwrap()
+	equal(t, errUnit, unwrapped)
 }
 
 func TestContentErrorError(t *testing.T) {
@@ -98,18 +108,29 @@ func TestContentErrorError(t *testing.T) {
 }
 
 func TestContentErrorUnwrap(t *testing.T) {
-	errUnit := errors.New("unit test error")
+	errUnit1 := errors.New("unit test error 1")
+	errUnit2 := errors.New("unit test error 2")
 	contentError := ContentError{
 		FieldErrors: []FieldError{
 			{
-				Err: errUnit,
+				Err: errUnit1,
+			},
+			{
+				Err: errUnit2,
 			},
 		},
 	}
 
-	if !errors.Is(contentError, errUnit) {
-		t.Error("ContentError unwrapping failed")
+	expected := []error{
+		FieldError{
+			Err: errUnit1,
+		},
+		FieldError{
+			Err: errUnit2,
+		},
 	}
+	unwrapped := contentError.Unwrap()
+	equal(t, expected, unwrapped)
 }
 
 type customUnmarshalledString string
