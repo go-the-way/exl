@@ -166,26 +166,14 @@ func getFieldInterface(destField reflect.Value) any {
 		destFieldPointer = destField.Addr()
 	}
 
-	if !destField.CanInterface() {
-		return nil
-	}
-
 	return destFieldPointer.Interface()
 }
 
 func UnmarshalExcelUnmarshaler(destField reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
-
-	intf := getFieldInterface(destField)
-	if intf == nil {
-		// This should not happen at runtime,
-		// as we have alread cast successfully to get here
-		return ErrCannotCastUnmarshaler
-	}
-
-	unmarshaler, ok := intf.(ExcelUnmarshaler)
+	unmarshaler, ok := getFieldInterface(destField).(ExcelUnmarshaler)
 	if !ok {
 		// This should not happen at runtime,
-		// as we have alread cast successfully to get here
+		// as we have already cast successfully to get here
 		return ErrCannotCastUnmarshaler
 	}
 
@@ -193,15 +181,7 @@ func UnmarshalExcelUnmarshaler(destField reflect.Value, cell *xlsx.Cell, params 
 }
 
 func UnmarshalTextUnmarshaler(destField reflect.Value, cell *xlsx.Cell, params *ExcelUnmarshalParameters) error {
-
-	intf := getFieldInterface(destField)
-	if intf == nil {
-		// This should not happen at runtime,
-		// as we have alread cast successfully to get here
-		return ErrCannotCastUnmarshaler
-	}
-
-	unmarshaler, ok := intf.(encoding.TextUnmarshaler)
+	unmarshaler, ok := getFieldInterface(destField).(encoding.TextUnmarshaler)
 	if !ok {
 		// This should not happen at runtime,
 		// as we have alread cast successfully to get here
