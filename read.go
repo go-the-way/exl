@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"time"
 
@@ -222,8 +221,14 @@ func unmarshalPointer(destPointer reflect.Value, cell *xlsx.Cell, params *ExcelU
 	return unmarshalFunc(destValue, cell, params)
 }
 
-// Read io.Reader each row bind to `T`
+// Read opens an xlsx file from the given io.Reader.
+// Each row is parsed and unmarshalled into a slice of `T`.
+// Note that this function needs to read the reader entirely
+// into memory to determine the size, otherwise the zip reader cannot be called.
+// Use one of the other `Read*` methods to avoid reading the whole file into memory
+// before parsing starts - the excel library will copy the file content into memory anyways.
 func Read[T ReadConfigurator](reader io.Reader, filterFunc ...func(t T) (add bool)) ([]T, error) {
+	// since io.Reader does not provide a size, we have to read it all to get the size
 	if bytes, err := io.ReadAll(reader); err != nil {
 		return []T(nil), err
 	} else {
@@ -231,13 +236,34 @@ func Read[T ReadConfigurator](reader io.Reader, filterFunc ...func(t T) (add boo
 	}
 }
 
-// ReadFile each row bind to `T`
-func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool)) ([]T, error) {
-	if bytes, err := os.ReadFile(file); err != nil {
-		return []T(nil), err
-	} else {
-		return ReadBinary(bytes, filterFunc...)
+// ReadReaderAt opens an xlsx file at the given file path.
+// Each row is parsed and unmarshalled into a slice of `T`.
+func ReadReaderAt[T ReadConfigurator](reader io.ReaderAt, size int64, filterFunc ...func(t T) (add bool)) ([]T, error) {
+	f, err := xlsx.OpenReaderAt(reader, size)
+	if err != nil {
+		return nil, err
 	}
+	return read[T](f, filterFunc...)
+}
+
+// ReadFile opens an xlsx file at the given file path.
+// Each row is parsed and unmarshalled into a slice of `T`.
+func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool)) ([]T, error) {
+	f, err := xlsx.OpenFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return read[T](f, filterFunc...)
+}
+
+// ReadBinary opens an xlsx file from the provided bytes.
+// Each row is parsed and unmarshalled into a slice of `T`.
+func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
+	f, err := xlsx.OpenBinary(bytes)
+	if err != nil {
+		return nil, err
+	}
+	return read[T](f, filterFunc...)
 }
 
 type fieldInfo struct {
@@ -246,12 +272,7 @@ type fieldInfo struct {
 	unmarshalFunc     UnmarshalExcelFunc
 }
 
-// ReadBinary each row bind to `T`
-func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add bool)) ([]T, error) {
-	f, err := xlsx.OpenBinary(bytes)
-	if err != nil {
-		return nil, err
-	}
+func read[T ReadConfigurator](f *xlsx.File, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	var t T
 	rc := defaultReadConfig()
 	t.ReadConfigure(rc)
@@ -353,7 +374,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 					cell := row.GetCell(columnIndex)
 
 					destField := val.Field(fi.reflectFieldIndex)
-					err = fi.unmarshalFunc(destField, cell, unmarshalConfig)
+					err := fi.unmarshalFunc(destField, cell, unmarshalConfig)
 					if err != nil && rc.UnmarshalErrorHandling != UnmarshalErrorIgnore {
 						fer := FieldError{
 							RowIndex:     rowIndex,
