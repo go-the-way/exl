@@ -607,8 +607,8 @@ func TestReadFile(t *testing.T) {
 }
 
 func TestReadTrimSpace(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
@@ -643,8 +643,8 @@ func (*missingColumnsNotAllowed) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestReadSkipColumns(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
@@ -693,8 +693,8 @@ func (*missingTypesNotAllowed) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestReadSkipTypes(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1"},
 		{"Name1 Content"},
@@ -753,8 +753,8 @@ func (*collectUnmarshalErrorsUnlimited) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestUnmarshalErrors(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1"},
 		{"error please"},
@@ -851,8 +851,8 @@ func TestUnmarshalErrors(t *testing.T) {
 }
 
 func TestReadFilterFunc(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name11", "Name22", "Name33", "Name44", "Name55"},
@@ -896,28 +896,25 @@ func TestReadExcel(t *testing.T) {
 	}
 }
 
-func testBasic(testNum int) error {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
-	data := make([][]string, testNum, testNum)
+func testBasic(t *testing.T, testNum int) {
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+	data := make([][]string, testNum)
 	for i := range data {
 		data[i] = []string{fmt.Sprintf("%d", i)}
 	}
 	if err := WriteExcel(testFile, data); err != nil {
-		return err
+		t.Fatal(err.Error())
 	}
 	if err := ReadExcel(testFile, 0, func(index int, rows *xlsx.Row) {
-		if !reflect.DeepEqual(rows.GetCell(0).Value, fmt.Sprintf("%d", index)) {
-			panic("test failed")
-		}
+		equal(t, fmt.Sprintf("%d", index), rows.GetCell(0).Value)
 	}); err != nil {
-		return err
+		t.Fatal(err.Error())
 	}
-	return nil
 }
 
 func TestBasic(t *testing.T) {
-	_ = testBasic(10)
-	_ = testBasic(100)
-	_ = testBasic(10000)
+	testBasic(t, 10)
+	testBasic(t, 100)
+	testBasic(t, 10000)
 }
