@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"reflect"
 	"strings"
 	"testing"
@@ -284,143 +285,330 @@ func TestGetUnmarshalFunc(t *testing.T) {
 	})
 }
 
-func TestReadFileErr(t *testing.T) {
-	if _, err := ReadFile[*readTmp](""); err == nil {
-		t.Error("test failed")
-	}
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
-	_ = Write(testFile, []*writeTmp{{}})
-	if _, err := ReadFile[*readSheetIndexOutOfRange](testFile); err != ErrSheetIndexOutOfRange {
-		t.Error("test failed")
-	}
-	if _, err := ReadFile[*readHeaderRowIndexOutOfRange](testFile); err != ErrHeaderRowIndexOutOfRange {
-		t.Error("test failed")
-	}
-	if _, err := ReadFile[*readDataStartRowIndexOutOfRange](testFile); err != ErrDataStartRowIndexOutOfRange {
-		t.Error("test failed")
-	}
-}
-
-func TestReadBinaryErr(t *testing.T) {
-	if _, err := ReadBinary[*readTmp](nil); err == nil {
-		t.Error("test failed")
-	}
-}
-
 type _reader struct{}
 
 func (*_reader) Read([]byte) (n int, err error) {
-	return 0, errors.New("")
+	return 0, errors.New("read: unit test error")
+}
+
+func (*_reader) ReadAt([]byte, int64) (n int, err error) {
+	return 0, errors.New("readat: unit test error")
+}
+
+func TestReadBinary(t *testing.T) {
+	t.Run("error reading empty slice", func(t *testing.T) {
+		_, err := ReadBinary[*readTmp]([]byte{})
+		equal(t, "zip: not a valid zip file", err.Error())
+	})
+	t.Run("error (not panic) reading nil", func(t *testing.T) {
+		_, err := ReadBinary[*readTmp](nil)
+		equal(t, "zip: not a valid zip file", err.Error())
+	})
+	t.Run("success reading valid file", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+		// Shortened test data, see tests for ReadFile for full test
+
+		data := [][]string{
+			{"Name1", "Name2", "Name3", "Name4", "Name5"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+		}
+
+		if err := WriteExcel(testFile, data); err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+
+		bytes, err := os.ReadFile(testFile)
+		if err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+
+		if models, err := ReadBinary[*readTmp](bytes); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != len(data)-1 {
+			t.Error("test failed")
+		} else {
+			for i, m := range models {
+				d := data[i+1]
+				if d[0] != m.Name1 {
+					t.Error("test failed: Name1 not equal")
+				}
+				if d[1] != m.Name2 {
+					t.Error("test failed: Name2 not equal")
+				}
+				if d[2] != m.Name3 {
+					t.Error("test failed: Name3 not equal")
+				}
+				if d[3] != m.Name4 {
+					t.Error("test failed: Name4 not equal")
+				}
+				if d[4] != m.Name5 {
+					t.Error("test failed: Name5 not equal")
+				}
+			}
+		}
+	})
 }
 
 func TestRead(t *testing.T) {
-	if _, err := Read[*readTmp](&_reader{}); err == nil {
-		t.Error("test failed")
-	}
-	if _, err := Read[*readTmp](strings.NewReader("")); err == nil {
-		t.Error("test failed")
-	}
+	t.Run("error reading empty reader", func(t *testing.T) {
+		_, err := Read[*readTmp](strings.NewReader(""))
+		equal(t, "zip: not a valid zip file", err.Error())
+	})
+	t.Run("error reading with read error", func(t *testing.T) {
+		_, err := Read[*readTmp](&_reader{})
+		equal(t, "read: unit test error", err.Error())
+	})
+	t.Run("success reading valid file", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+		// Shortened test data, see tests for ReadFile for full test
+
+		data := [][]string{
+			{"Name1", "Name2", "Name3", "Name4", "Name5"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+		}
+
+		if err := WriteExcel(testFile, data); err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+
+		reader, err := os.Open(testFile)
+		if err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+		defer reader.Close()
+
+		if models, err := Read[*readTmp](reader); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != len(data)-1 {
+			t.Error("test failed")
+		} else {
+			for i, m := range models {
+				d := data[i+1]
+				if d[0] != m.Name1 {
+					t.Error("test failed: Name1 not equal")
+				}
+				if d[1] != m.Name2 {
+					t.Error("test failed: Name2 not equal")
+				}
+				if d[2] != m.Name3 {
+					t.Error("test failed: Name3 not equal")
+				}
+				if d[3] != m.Name4 {
+					t.Error("test failed: Name4 not equal")
+				}
+				if d[4] != m.Name5 {
+					t.Error("test failed: Name5 not equal")
+				}
+			}
+		}
+	})
+}
+
+func TestReadReaderAt(t *testing.T) {
+	t.Run("error reading empty reader", func(t *testing.T) {
+		_, err := ReadReaderAt[*readTmp](strings.NewReader(""), 0)
+		equal(t, "zip: not a valid zip file", err.Error())
+	})
+	t.Run("error reading with read error", func(t *testing.T) {
+		_, err := ReadReaderAt[*readTmp](&_reader{}, 0)
+		equal(t, "readat: unit test error", err.Error())
+	})
+	t.Run("success reading valid file", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+		// Shortened test data, see tests for ReadFile for full test
+
+		data := [][]string{
+			{"Name1", "Name2", "Name3", "Name4", "Name5"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+		}
+
+		if err := WriteExcel(testFile, data); err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+
+		reader, err := os.Open(testFile)
+		if err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+		defer reader.Close()
+		fi, err := os.Stat(testFile)
+		if err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+
+		if models, err := ReadReaderAt[*readTmp](reader, fi.Size()); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != len(data)-1 {
+			t.Error("test failed")
+		} else {
+			for i, m := range models {
+				d := data[i+1]
+				if d[0] != m.Name1 {
+					t.Error("test failed: Name1 not equal")
+				}
+				if d[1] != m.Name2 {
+					t.Error("test failed: Name2 not equal")
+				}
+				if d[2] != m.Name3 {
+					t.Error("test failed: Name3 not equal")
+				}
+				if d[3] != m.Name4 {
+					t.Error("test failed: Name4 not equal")
+				}
+				if d[4] != m.Name5 {
+					t.Error("test failed: Name5 not equal")
+				}
+			}
+		}
+	})
 }
 
 func TestReadFile(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
-	data := [][]string{
-		{"Name1", "Name2", "Name3", "Name4", "Name5"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-		{"Name11", "Name22", "Name33", "Name44", "Name55"},
-		{"Name111", "Name222", "Name333", "Name444", "Name555"},
-		{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
-		{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
-		{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
-	}
-	if err := WriteExcel(testFile, data); err != nil {
-		t.Error("test failed: " + err.Error())
-	}
-	if models, err := ReadFile[*readTmp](testFile); err != nil {
-		t.Error("test failed: " + err.Error())
-	} else if len(models) != len(data)-1 {
-		t.Error("test failed")
-	} else {
-		for i, m := range models {
-			d := data[i+1]
-			if d[0] != m.Name1 {
-				t.Error("test failed: Name1 not equal")
-			}
-			if d[1] != m.Name2 {
-				t.Error("test failed: Name2 not equal")
-			}
-			if d[2] != m.Name3 {
-				t.Error("test failed: Name3 not equal")
-			}
-			if d[3] != m.Name4 {
-				t.Error("test failed: Name4 not equal")
-			}
-			if d[4] != m.Name5 {
-				t.Error("test failed: Name5 not equal")
+
+	t.Run("error reading missing file", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "does_not_exist.xlsx")
+		_, err := ReadFile[*readTmp](testFile)
+		// Concrete error message may vary between systems,
+		// only verifying first part from xlsx library
+		equal(t, "OpenFile", strings.Split(err.Error(), ":")[0])
+	})
+
+	t.Run("error reading with sheet index out of range", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+		err := Write(testFile, []*writeTmp{{}})
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+
+		_, err = ReadFile[*readSheetIndexOutOfRange](testFile)
+		equal(t, ErrSheetIndexOutOfRange, err)
+	})
+
+	t.Run("error reading with header row index out of range", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+		err := Write(testFile, []*writeTmp{{}})
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+
+		_, err = ReadFile[*readHeaderRowIndexOutOfRange](testFile)
+		equal(t, ErrHeaderRowIndexOutOfRange, err)
+	})
+
+	t.Run("error reading with start row index out of range", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+		err := Write(testFile, []*writeTmp{{}})
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+
+		_, err = ReadFile[*readDataStartRowIndexOutOfRange](testFile)
+		equal(t, ErrDataStartRowIndexOutOfRange, err)
+	})
+
+	t.Run("successful reading", func(t *testing.T) {
+		testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+		data := [][]string{
+			{"Name1", "Name2", "Name3", "Name4", "Name5"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+			{"Name11", "Name22", "Name33", "Name44", "Name55"},
+			{"Name111", "Name222", "Name333", "Name444", "Name555"},
+			{"Name1111", "Name2222", "Name3333", "Name4444", "Name5555"},
+			{"Name11111", "Name22222", "Name33333", "Name44444", "Name55555"},
+			{"Name111111", "Name222222", "Name333333", "Name444444", "Name555555"},
+		}
+		if err := WriteExcel(testFile, data); err != nil {
+			t.Error("test failed: " + err.Error())
+		}
+		if models, err := ReadFile[*readTmp](testFile); err != nil {
+			t.Error("test failed: " + err.Error())
+		} else if len(models) != len(data)-1 {
+			t.Error("test failed")
+		} else {
+			for i, m := range models {
+				d := data[i+1]
+				if d[0] != m.Name1 {
+					t.Error("test failed: Name1 not equal")
+				}
+				if d[1] != m.Name2 {
+					t.Error("test failed: Name2 not equal")
+				}
+				if d[2] != m.Name3 {
+					t.Error("test failed: Name3 not equal")
+				}
+				if d[3] != m.Name4 {
+					t.Error("test failed: Name4 not equal")
+				}
+				if d[4] != m.Name5 {
+					t.Error("test failed: Name5 not equal")
+				}
 			}
 		}
-	}
+	})
+
 }
 
 func TestReadTrimSpace(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
@@ -455,8 +643,8 @@ func (*missingColumnsNotAllowed) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestReadSkipColumns(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name1 ", "Name2", "Name3", "Name4", "Name5"},
@@ -505,8 +693,8 @@ func (*missingTypesNotAllowed) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestReadSkipTypes(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1"},
 		{"Name1 Content"},
@@ -565,8 +753,8 @@ func (*collectUnmarshalErrorsUnlimited) ReadConfigure(rc *ReadConfig) {
 }
 
 func TestUnmarshalErrors(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1"},
 		{"error please"},
@@ -663,8 +851,8 @@ func TestUnmarshalErrors(t *testing.T) {
 }
 
 func TestReadFilterFunc(t *testing.T) {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
 	data := [][]string{
 		{"Name1", "Name2", "Name3", "Name4", "Name5"},
 		{"Name11", "Name22", "Name33", "Name44", "Name55"},
@@ -708,28 +896,25 @@ func TestReadExcel(t *testing.T) {
 	}
 }
 
-func testBasic(testNum int) error {
-	testFile := "tmp.xlsx"
-	defer func() { _ = os.Remove(testFile) }()
-	data := make([][]string, testNum, testNum)
+func testBasic(t *testing.T, testNum int) {
+	testFile := path.Join(t.TempDir(), "tmp.xlsx")
+
+	data := make([][]string, testNum)
 	for i := range data {
 		data[i] = []string{fmt.Sprintf("%d", i)}
 	}
 	if err := WriteExcel(testFile, data); err != nil {
-		return err
+		t.Fatal(err.Error())
 	}
 	if err := ReadExcel(testFile, 0, func(index int, rows *xlsx.Row) {
-		if !reflect.DeepEqual(rows.GetCell(0).Value, fmt.Sprintf("%d", index)) {
-			panic("test failed")
-		}
+		equal(t, fmt.Sprintf("%d", index), rows.GetCell(0).Value)
 	}); err != nil {
-		return err
+		t.Fatal(err.Error())
 	}
-	return nil
 }
 
 func TestBasic(t *testing.T) {
-	_ = testBasic(10)
-	_ = testBasic(100)
-	_ = testBasic(10000)
+	testBasic(t, 10)
+	testBasic(t, 100)
+	testBasic(t, 10000)
 }
