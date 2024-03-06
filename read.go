@@ -243,7 +243,7 @@ func ReadReaderAt[T ReadConfigurator](reader io.ReaderAt, size int64, filterFunc
 	if err != nil {
 		return nil, err
 	}
-	return read[T](f, filterFunc...)
+	return ReadParsed[T](f, filterFunc...)
 }
 
 // ReadFile opens an xlsx file at the given file path.
@@ -253,7 +253,7 @@ func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool
 	if err != nil {
 		return nil, err
 	}
-	return read[T](f, filterFunc...)
+	return ReadParsed[T](f, filterFunc...)
 }
 
 // ReadBinary opens an xlsx file from the provided bytes.
@@ -263,7 +263,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	if err != nil {
 		return nil, err
 	}
-	return read[T](f, filterFunc...)
+	return ReadParsed[T](f, filterFunc...)
 }
 
 type fieldInfo struct {
@@ -272,7 +272,9 @@ type fieldInfo struct {
 	unmarshalFunc     UnmarshalExcelFunc
 }
 
-func read[T ReadConfigurator](f *xlsx.File, filterFunc ...func(t T) (add bool)) ([]T, error) {
+// ReadParsed opens an already parsed xlsx file directly.
+// Each row is parsed and unmarshalled into a slice of `T`.
+func ReadParsed[T ReadConfigurator](f *xlsx.File, filterFunc ...func(t T) (add bool)) ([]T, error) {
 	var t T
 	rc := defaultReadConfig()
 	t.ReadConfigure(rc)
