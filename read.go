@@ -24,8 +24,9 @@ import (
 )
 
 type (
-	ReadConfigurator interface{ ReadConfigure(rc *ReadConfig) }
-	ReadConfig       struct {
+	ReadConfigurator         interface{ ReadConfigure(rc *ReadConfig) }
+	UnusedColumnsHandlerFunc func(*xlsx.Cell, *reflect.Value, FieldInfo)
+	ReadConfig               struct {
 		// The tag name to use when looking for fields in the target struct.
 		// Defaults to "excel".
 		TagName string
@@ -72,6 +73,9 @@ type (
 		// Configure a limit of 0 to collect all errors, without upper limit.
 		// Defaults to 10.
 		MaxUnmarshalErrors uint64
+		// Handler function for columns not present in struct.
+		// Defaults to nil.
+		UnusedColumnsHandler UnusedColumnsHandlerFunc
 	}
 	UnmarshalErrorHandling uint8
 	FieldError             struct {
@@ -240,9 +244,9 @@ func ReadFile[T ReadConfigurator](file string, filterFunc ...func(t T) (add bool
 	}
 }
 
-type fieldInfo struct {
+type FieldInfo struct {
 	reflectFieldIndex int
-	header            string
+	Header            string
 	unmarshalFunc     UnmarshalExcelFunc
 }
 
@@ -274,7 +278,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	tagToFieldMap := make(map[string]int)
 	// Key: Column Index
 	// Value: Unmarshalling Info
-	columnFields := make([]fieldInfo, len(headers))
+	columnFields := make([]FieldInfo, len(headers))
 
 	typ := reflect.TypeOf(t).Elem()
 	for i := 0; i < typ.NumField(); i++ {
@@ -293,9 +297,9 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 			if !have {
 				if rc.SkipUnknownColumns {
 					// Skip reading this field
-					columnFields[columnIndex] = fieldInfo{
+					columnFields[columnIndex] = FieldInfo{
 						reflectFieldIndex: reflectFieldIndex,
-						header:            header,
+						Header:            header,
 						unmarshalFunc:     nil,
 					}
 					continue
@@ -310,9 +314,9 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 			if unmarshaler == nil {
 				if rc.SkipUnknownTypes {
 					// Skip reading this field
-					columnFields[columnIndex] = fieldInfo{
+					columnFields[columnIndex] = FieldInfo{
 						reflectFieldIndex: reflectFieldIndex,
-						header:            header,
+						Header:            header,
 						unmarshalFunc:     nil,
 					}
 					continue
@@ -321,9 +325,9 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 				}
 			}
 
-			columnFields[columnIndex] = fieldInfo{
+			columnFields[columnIndex] = FieldInfo{
 				reflectFieldIndex: reflectFieldIndex,
-				header:            header,
+				Header:            header,
 				unmarshalFunc:     unmarshaler,
 			}
 		}
@@ -348,6 +352,9 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 					// this field has been skipped by previous logic.
 					// e.g. no destination field, or unknown type.
 					if fi.unmarshalFunc == nil {
+						if rc.UnusedColumnsHandler != nil {
+							rc.UnusedColumnsHandler(row.GetCell(columnIndex), &val, fi)
+						}
 						continue
 					}
 					cell := row.GetCell(columnIndex)
@@ -358,7 +365,7 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 						fer := FieldError{
 							RowIndex:     rowIndex,
 							ColumnIndex:  columnIndex,
-							ColumnHeader: fi.header,
+							ColumnHeader: fi.Header,
 							Err:          err,
 						}
 						if rc.UnmarshalErrorHandling == UnmarshalErrorAbort {
