@@ -30,6 +30,9 @@ type (
 		// The tag name to use when looking for fields in the target struct.
 		// Defaults to "excel".
 		TagName string
+		// Name of the worksheet to be read. Takes precedence over SheetIndex.
+		// Defaults to ""
+		SheetName string
 		// The index of the worksheet to be read.
 		// Defaults to 0, the first worksheet.
 		SheetIndex int
@@ -259,10 +262,19 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 	var t T
 	rc := defaultReadConfig()
 	t.ReadConfigure(rc)
-	if rc.SheetIndex < 0 || rc.SheetIndex > len(f.Sheet)-1 {
+	sidx := rc.SheetIndex
+	if len(rc.SheetName) > 0 {
+		for idx, s := range f.Sheets {
+			if s.Name == rc.SheetName {
+				sidx = idx
+				break
+			}
+		}
+	}
+	if sidx < 0 || sidx > len(f.Sheet)-1 {
 		return nil, ErrSheetIndexOutOfRange
 	}
-	sheet := f.Sheets[rc.SheetIndex]
+	sheet := f.Sheets[sidx]
 	if rc.HeaderRowIndex < 0 || rc.HeaderRowIndex > sheet.MaxRow-1 {
 		return nil, ErrHeaderRowIndexOutOfRange
 	}

@@ -40,10 +40,12 @@ type (
 	readSheetIndexOutOfRange        struct{}
 	readHeaderRowIndexOutOfRange    struct{}
 	readDataStartRowIndexOutOfRange struct{}
+	readSheetNameIndexOutOfRange    struct{}
 )
 
 func (t *readTmp) ReadConfigure(rc *ReadConfig) {
 	rc.TrimSpace = true
+	rc.SheetName = "Sheet1"
 }
 
 func countUnusedColumns(cell *xlsx.Cell, val *reflect.Value, fi FieldInfo) {
@@ -56,6 +58,11 @@ func (t *readUnusedTmp) ReadConfigure(rc *ReadConfig) {
 }
 
 func (t *readSheetIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
+	rc.SheetIndex = -1
+}
+
+func (t *readSheetNameIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
+	rc.SheetName = "Some"
 	rc.SheetIndex = -1
 }
 
@@ -312,6 +319,9 @@ func TestReadFileErr(t *testing.T) {
 		t.Error("test failed")
 	}
 	if _, err := ReadFile[*readDataStartRowIndexOutOfRange](testFile); err != ErrDataStartRowIndexOutOfRange {
+		t.Error("test failed")
+	}
+	if _, err := ReadFile[*readSheetNameIndexOutOfRange](testFile); err != ErrSheetIndexOutOfRange {
 		t.Error("test failed")
 	}
 }
