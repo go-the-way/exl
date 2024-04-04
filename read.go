@@ -24,9 +24,10 @@ import (
 )
 
 type (
-	ReadConfigurator         interface{ ReadConfigure(rc *ReadConfig) }
-	UnusedColumnsHandlerFunc func(*xlsx.Cell, *reflect.Value, FieldInfo)
-	ReadConfig               struct {
+	ReadConfigurator             interface{ ReadConfigure(rc *ReadConfig) }
+	UnusedColumnsHandlerFunc     func(*xlsx.Cell, *reflect.Value, FieldInfo)
+	RowUnmarshalErrorHandlerFunc func(*xlsx.Cell, *reflect.Value, FieldInfo)
+	ReadConfig                   struct {
 		// The tag name to use when looking for fields in the target struct.
 		// Defaults to "excel".
 		TagName string
@@ -79,6 +80,11 @@ type (
 		// Handler function for columns not present in struct.
 		// Defaults to nil.
 		UnusedColumnsHandler UnusedColumnsHandlerFunc
+		// Handler function for unmarshal errors during row parsing.
+		// Takes precedence over all UnmarshalErrorHandling except
+		// UnmarshalErrorIgnore.
+		// Defaults to nil.
+		RowUnmarshalErrorHandler RowUnmarshalErrorHandlerFunc
 	}
 	UnmarshalErrorHandling uint8
 	FieldError             struct {
@@ -374,6 +380,10 @@ func ReadBinary[T ReadConfigurator](bytes []byte, filterFunc ...func(t T) (add b
 					destField := val.Field(fi.reflectFieldIndex)
 					err = fi.unmarshalFunc(destField, cell, unmarshalConfig)
 					if err != nil && rc.UnmarshalErrorHandling != UnmarshalErrorIgnore {
+						if rc.RowUnmarshalErrorHandler != nil {
+							rc.RowUnmarshalErrorHandler(cell, &val, fi)
+							continue
+						}
 						fer := FieldError{
 							RowIndex:     rowIndex,
 							ColumnIndex:  columnIndex,
