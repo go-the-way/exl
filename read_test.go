@@ -33,6 +33,11 @@ type (
 		Name4 string `excel:"Name4"`
 		Name5 string `excel:"Name5"`
 	}
+	readErrorTmp struct {
+		Name1       string `excel:"Name1"`
+		Name2       int    `excel:"Name2"`
+		ErrorsCount int
+  }
 	readUnusedTmp struct {
 		Name1 string `excel:"Name1"`
 		Name2 string `excel:"Name2"`
@@ -47,6 +52,15 @@ type (
 func (t *readTmp) ReadConfigure(rc *ReadConfig) {
 	rc.TrimSpace = true
 	rc.SheetName = "Sheet1"
+}
+
+func countUnmarshalErrors(cell *xlsx.Cell, val *reflect.Value, fi FieldInfo) {
+	countF := val.FieldByName("ErrorsCount")
+	countF.SetInt(countF.Int() + 1)
+}
+
+func (t *readErrorTmp) ReadConfigure(rc *ReadConfig) {
+	rc.RowUnmarshalErrorHandler = countUnmarshalErrors
 }
 
 func countUnusedColumns(cell *xlsx.Cell, val *reflect.Value, fi FieldInfo) {
@@ -684,6 +698,27 @@ func TestHandleUnusedColumns(t *testing.T) {
 		t.Error("test failed: " + err.Error())
 	}
 	if len(models) != 1 || models[0].Count != 3 {
+		t.Error("test failed")
+	}
+}
+
+func TestHandleUnmarshalErrors(t *testing.T) {
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	data := [][]string{
+		{"Name1", "Name2"},
+		{"Name1 ", "Something"},
+		{"Name1 ", "22"},
+	}
+	if err := WriteExcel(testFile, data); err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+
+	models, err := ReadFile[*readErrorTmp](testFile)
+	if err != nil {
+		t.Error("test failed: " + err.Error())
+	}
+	if len(models) != 2 || models[0].ErrorsCount != 1 || models[1].ErrorsCount != 0 {
 		t.Error("test failed")
 	}
 }
