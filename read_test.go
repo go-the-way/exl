@@ -41,10 +41,12 @@ type (
 	readSheetIndexOutOfRange        struct{}
 	readHeaderRowIndexOutOfRange    struct{}
 	readDataStartRowIndexOutOfRange struct{}
+	readSheetNameIndexOutOfRange    struct{}
 )
 
 func (t *readTmp) ReadConfigure(rc *ReadConfig) {
 	rc.TrimSpace = true
+	rc.SheetName = "Sheet1"
 }
 
 func countUnusedColumns(cell *xlsx.Cell, val *reflect.Value, fi FieldInfo) {
@@ -57,6 +59,11 @@ func (t *readUnusedTmp) ReadConfigure(rc *ReadConfig) {
 }
 
 func (t *readSheetIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
+	rc.SheetIndex = -1
+}
+
+func (t *readSheetNameIndexOutOfRange) ReadConfigure(rc *ReadConfig) {
+	rc.SheetName = "Some"
 	rc.SheetIndex = -1
 }
 
@@ -297,6 +304,27 @@ func TestGetUnmarshalFunc(t *testing.T) {
 			equal(t, "error formatting string value: invalid formatting code: unsupported or unescaped characters", err.Error())
 		})
 	})
+}
+  
+func TestReadFileErr(t *testing.T) {
+	if _, err := ReadFile[*readTmp](""); err == nil {
+		t.Error("test failed")
+	}
+	testFile := "tmp.xlsx"
+	defer func() { _ = os.Remove(testFile) }()
+	_ = Write(testFile, []*writeTmp{{}})
+	if _, err := ReadFile[*readSheetIndexOutOfRange](testFile); err != ErrSheetIndexOutOfRange {
+		t.Error("test failed")
+	}
+	if _, err := ReadFile[*readHeaderRowIndexOutOfRange](testFile); err != ErrHeaderRowIndexOutOfRange {
+		t.Error("test failed")
+	}
+	if _, err := ReadFile[*readDataStartRowIndexOutOfRange](testFile); err != ErrDataStartRowIndexOutOfRange {
+		t.Error("test failed")
+	}
+	if _, err := ReadFile[*readSheetNameIndexOutOfRange](testFile); err != ErrSheetIndexOutOfRange {
+		t.Error("test failed")
+	}
 }
 
 type _reader struct{}
