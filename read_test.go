@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tealeg/xlsx/v3"
+	"codeberg.org/tealeg/xlsx/v4"
 )
 
 type (
@@ -37,7 +37,7 @@ type (
 		Name1       string `excel:"Name1"`
 		Name2       int    `excel:"Name2"`
 		ErrorsCount int
-  }
+	}
 	readUnusedTmp struct {
 		Name1 string `excel:"Name1"`
 		Name2 string `excel:"Name2"`
@@ -319,7 +319,7 @@ func TestGetUnmarshalFunc(t *testing.T) {
 		})
 	})
 }
-  
+
 func TestReadFileErr(t *testing.T) {
 	if _, err := ReadFile[*readTmp](""); err == nil {
 		t.Error("test failed")

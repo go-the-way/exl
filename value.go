@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tealeg/xlsx/v3"
+	"codeberg.org/tealeg/xlsx/v4"
 )
 
 var ErrNegativeUInt = errors.New("negative integer provided for unsigned field")

@@ -15,7 +15,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/tealeg/xlsx/v3"
+	"codeberg.org/tealeg/xlsx/v4"
 )
 
 type (
