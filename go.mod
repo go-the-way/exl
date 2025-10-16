@@ -1,8 +1,10 @@
 module github.com/go-the-way/exl
 
-go 1.18
+go 1.24
 
-require github.com/tealeg/xlsx/v3 v3.3.4
+toolchain go1.24.6
+
+require codeberg.org/tealeg/xlsx/v4 v4.0.0
 
 require (
 	github.com/frankban/quicktest v1.14.6 // indirect

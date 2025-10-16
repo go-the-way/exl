@@ -17,7 +17,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/tealeg/xlsx/v3"
+	"codeberg.org/tealeg/xlsx/v4"
 )
 
 // Writer define a writer for exl

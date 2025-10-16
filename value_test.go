@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tealeg/xlsx/v3"
+	"codeberg.org/tealeg/xlsx/v4"
 )
 
 type _model struct {
